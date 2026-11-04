@@ -1,0 +1,96 @@
+@import url("https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Public+Sans:wght@400;500;600&display=swap");
+
+:root {
+  --bg: #fbf6e6;
+  --surface: #fffefa;
+  --gold: #d4a72c;
+  --gold-hover: #e2b93d;
+  --gold-deep: #8c6a0f;
+  --gold-tint: #f6ebc8;
+  --gold-wash: #fbf3d8;
+  --umber: #2b2112;
+  --muted: #6b5a3c;
+  --line: #e6d9b0;
+  --danger: #9b2c1f;
+  --danger-bg: #fbe9e4;
+
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-head: "Newsreader", Georgia, "Times New Roman", serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--umber);
+  font-family: var(--font-body);
+  line-height: 1.5;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-head);
+  font-weight: 600;
+}
+
+input {
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px;
+}
+input:focus {
+  outline: none;
+  border-color: var(--gold-deep);
+  box-shadow: 0 0 0 3px rgba(212, 167, 44, 0.35);
+}
+
+button {
+  font: inherit;
+  font-weight: 600;
+  padding: 9px 16px;
+  border: 1px solid var(--gold);
+  border-radius: 6px;
+  background: var(--gold);
+  color: var(--umber);
+  cursor: pointer;
+}
+button:hover:not(:disabled) {
+  background: var(--gold-hover);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+button.secondary {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--umber);
+}
+button.secondary:hover:not(:disabled) {
+  background: var(--gold-tint);
+}
+
+:focus-visible {
+  outline: 2px solid var(--gold-deep);
+  outline-offset: 2px;
+}
+
+.error {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-left: 3px solid var(--danger);
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.field-error {
+  color: var(--danger);
+  font-size: 12px;
+}
