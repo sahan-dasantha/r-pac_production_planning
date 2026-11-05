@@ -118,7 +118,8 @@ td:nth-child(4) {
   font-weight: 500;
   margin-top: 8px;
 }
-.modal input {
+.modal input,
+.modal select {
   width: 100%;
 }
 .row {

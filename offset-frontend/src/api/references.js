@@ -11,3 +11,6 @@ export const updateReference = (id, data) =>
 
 export const getHistory = (id) =>
   api.get(`/references/${id}/history/`).then((r) => r.data);
+
+export const getMachines = () =>
+  api.get("/references/machines/").then((r) => r.data);

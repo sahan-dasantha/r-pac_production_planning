@@ -2,7 +2,7 @@ from rest_framework import filters, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import Reference, ReferenceHistory
+from .models import Reference, ReferenceHistory, MACHINES
 from .serializers import ReferenceSerializer, ReferenceHistorySerializer
 
 TRACKED = ["ups", "colours", "sides", "default_machine"]
@@ -38,5 +38,9 @@ class ReferenceViewSet(viewsets.ModelViewSet):
     def history(self, request, pk=None):
         qs = self.get_object().history.all()[:50]
         return Response(ReferenceHistorySerializer(qs, many=True).data)
+
+    @action(detail=False, methods=["get"])
+    def machines(self, request):
+        return Response(MACHINES)
 
 # Create your views here.

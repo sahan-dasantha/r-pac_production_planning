@@ -2,13 +2,18 @@ from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
 
+MACHINES = [
+    "7 - K", "RANPATH", "SM - B", "SM - C",
+    "FROM BULK", "SCREEN", "PRINT CARE", "GUILLOTINE",
+]
+
 
 class Reference(models.Model):
     name = models.CharField(max_length=255, unique=True)
     ups = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     colours = models.PositiveSmallIntegerField(validators=[MinValueValidator(1)])
     sides = models.PositiveSmallIntegerField(validators=[MinValueValidator(1)])
-    default_machine = models.CharField(max_length=50, blank=True)
+    default_machine = models.CharField(max_length=50, blank=True, choices=[(m,m) for m in MACHINES])
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True,

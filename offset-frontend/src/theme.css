@@ -37,7 +37,8 @@ h3 {
   font-weight: 600;
 }
 
-input {
+input,
+select {
   font: inherit;
   color: inherit;
   background: var(--surface);
@@ -45,7 +46,8 @@ input {
   border-radius: 6px;
   padding: 10px;
 }
-input:focus {
+input:focus,
+select:focus {
   outline: none;
   border-color: var(--gold-deep);
   box-shadow: 0 0 0 3px rgba(212, 167, 44, 0.35);

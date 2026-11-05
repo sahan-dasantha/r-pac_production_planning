@@ -3,18 +3,8 @@ import {
   createReference,
   updateReference,
   getHistory,
+  getMachines,
 } from "../api/references";
-
-const MACHINES = [
-  "7 - K",
-  "RANPATH",
-  "SM - B",
-  "SM - C",
-  "FROM BULK",
-  "SCREEN",
-  "PRINT CARE",
-  "GUILLOTINE",
-];
 
 export default function ReferenceModal({ reference, onClose, onSaved }) {
   const isEdit = Boolean(reference.id);
@@ -28,6 +18,13 @@ export default function ReferenceModal({ reference, onClose, onSaved }) {
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState([]);
+  const [machines, setMachines] = useState([]);
+
+  useEffect(() => {
+    getMachines()
+      .then(setMachines)
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (isEdit)
@@ -121,17 +118,16 @@ export default function ReferenceModal({ reference, onClose, onSaved }) {
           </div>
         </div>
 
-        <label>Default machine</label>
-        <input
-          list="machines"
-          value={form.default_machine}
-          onChange={set("default_machine")}
-        />
-        <datalist id="machines">
-          {MACHINES.map((m) => (
-            <option key={m} value={m} />
+        <label>Machine</label>
+        <select value={form.default_machine} onChange={set("default_machine")}>
+          <option value="">Select machine</option>
+          {machines.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
           ))}
-        </datalist>
+        </select>
+        {fieldError("default_machine")}
 
         {isEdit && history.length > 0 && (
           <div className="history">
