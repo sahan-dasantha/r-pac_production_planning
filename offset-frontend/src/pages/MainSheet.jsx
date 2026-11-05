@@ -1,11 +1,8 @@
 import { useEffect, useState } from "react";
-import { useAuth } from "../context/AuthContext";
 import { searchReferences } from "../api/references";
 import ReferenceModal from "../components/ReferenceModal";
-import "./Dashboard.css";
 
-export default function Dashboard() {
-  const { user, logout } = useAuth();
+export default function MainSheet() {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [data, setData] = useState({
@@ -42,17 +39,7 @@ export default function Dashboard() {
   }, [query, page, reload]);
 
   return (
-    <div className="dash">
-      <header>
-        <h1>Offset Planner</h1>
-        <div>
-          <span>{user.username}</span>
-          <button className="secondary" onClick={logout}>
-            Log out
-          </button>
-        </div>
-      </header>
-
+    <>
       <div className="toolbar">
         <input
           placeholder="Search reference (e.g. MINI MB 3)..."
@@ -139,6 +126,6 @@ export default function Dashboard() {
           }}
         />
       )}
-    </div>
+    </>
   );
 }

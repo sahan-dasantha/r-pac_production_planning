@@ -32,6 +32,32 @@
   background: rgba(212, 167, 44, 0.15);
 }
 
+/* Tabs bar */
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid var(--gold);
+}
+.tabs a {
+  padding: 10px 20px;
+  color: var(--muted);
+  font-weight: 500;
+  text-decoration: none;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+}
+.tabs a:hover {
+  background: var(--gold-wash);
+  color: var(--umber);
+}
+.tabs a.active {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--umber);
+}
+
 .toolbar {
   display: flex;
   gap: 12px;
