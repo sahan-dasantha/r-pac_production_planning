@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Reference, ReferenceHistory
+from .models import Reference, ReferenceHistory, Job
 
 
 class ReferenceSerializer(serializers.ModelSerializer):
@@ -20,3 +20,29 @@ class ReferenceHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = ReferenceHistory
         fields = ["changes", "changed_by", "changed_at"]
+
+class JobSerializer(serializers.ModelSerializer):
+    # Show the username instead of the user's numeric id.
+    created_by = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = Job
+        fields = [
+            "id",
+            # --- sent by the Home form ---
+            "reference",        # the reference's id (from the dropdown)
+            "date",             # format YYYY-MM-DD
+            "quantity",
+            "machine",
+            # --- filled in by the backend (the frontend only reads them) ---
+            "reference_name",
+            "ups", "colours", "sides",
+            "impressions", "total_impressions", "total_clicks",
+            "created_by", "created_at",
+        ]
+        # Even if the frontend sends these, Django ignores them.
+        read_only_fields = [
+            "reference_name", "ups", "colours", "sides",
+            "impressions", "total_impressions", "total_clicks",
+            "created_by", "created_at",
+        ]        

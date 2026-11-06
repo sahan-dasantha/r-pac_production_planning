@@ -1,9 +1,9 @@
-from rest_framework import filters, viewsets
+from rest_framework import filters, mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import Reference, ReferenceHistory, MACHINES
-from .serializers import ReferenceSerializer, ReferenceHistorySerializer
+from .models import Reference, ReferenceHistory, Job, MACHINES
+from .serializers import ReferenceSerializer, ReferenceHistorySerializer, JobSerializer
 
 TRACKED = ["ups", "colours", "sides", "default_machine"]
 
@@ -43,4 +43,20 @@ class ReferenceViewSet(viewsets.ModelViewSet):
     def machines(self, request):
         return Response(MACHINES)
 
+class JobViewSet(
+    mixins.CreateModelMixin,    # POST /api/jobs/       -> save a new job
+    mixins.ListModelMixin,      # GET  /api/jobs/       -> list all jobs
+    mixins.RetrieveModelMixin,  # GET  /api/jobs/<id>/  -> one job
+    viewsets.GenericViewSet,
+):
+    """
+    Deliberately no update or delete: a saved job is a record.
+    (If you want to delete mistaken jobs later, we can add it.)
+    """
+    queryset = Job.objects.select_related("created_by")
+    serializer_class = JobSerializer
+
+    def perform_create(self, serializer):
+        # Record which logged-in user saved the job.
+        serializer.save(created_by=self.request.user)
 # Create your views here.
