@@ -35,3 +35,21 @@ export function parseDateInput(text) {
 
   return real ? `${yyyy}-${mm}-${dd}` : null;
 }
+
+/**
+ * Turns the backend's "2026-11-10" into "10/11/2026".
+ * We split the text instead of using new Date(), because new Date() can shift
+ * the day by one in some time zones.
+ */
+export function isoToDisplay(iso) {
+  const [year, month, day] = iso.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+/** Today's date as "YYYY-MM-DD" (local time), used in the download file name. */
+export function todayISO() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}

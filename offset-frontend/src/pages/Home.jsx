@@ -9,6 +9,8 @@ import ReferenceSelect from "../Components/ReferenceSelect";
 import { calculate, MAX_DB_INT } from "../utils/calc";
 import { formatDateInput, parseDateInput } from "../utils/dates";
 import "./Home.css";
+import { useNavigate } from "react-router-dom"; // used to jump to Job plans
+import SavedJobDialog from "../Components/SavedJobDialog";
 
 // Turns a backend error response into one readable sentence.
 function errorMessage(err, fallback) {
@@ -54,6 +56,9 @@ function ReadOnly({ value, result }) {
 }
 
 export default function Home() {
+  const navigate = useNavigate(); // moves to another tab
+  const homeRef = useRef(null); // lets us find the dropdown to focus it
+
   // ---------- Reference list (from the uploaded Excel sheet) ----------
   const [upload, setUpload] = useState(null); // info about the newest upload
   const [refs, setRefs] = useState([]); // the dropdown options
@@ -146,6 +151,9 @@ export default function Home() {
 
   // ---------- Save ----------
   async function handleSave() {
+    // Ignore clicks while a save is running or the popup is open.
+    if (saving || savedJob) return;
+
     setAttempted(true);
     setSaveError("");
     if (!inMain || Object.keys(problems).length > 0) return; // show the errors
@@ -166,9 +174,37 @@ export default function Home() {
     }
   }
 
+  // Empty every field so the next job starts from a blank form.
+  // The uploaded reference list is kept, so there is no need to upload again.
+  function clearForm() {
+    setSelected(null);
+    setDateText(""); // delete this line if you want the date to stay
+    setQuantityText("");
+    setMachine("");
+    setAttempted(false);
+    setSaveError("");
+    setSavedJob(null); // this is what closes the popup
+  }
+
+  // "Yes": clear the form and get ready for the next job.
+  function handleYes() {
+    clearForm();
+    window.scrollTo({ top: 0 });
+    // Wait a moment for the popup to disappear, then put the cursor
+    // in the reference dropdown.
+    setTimeout(() => {
+      homeRef.current?.querySelector('[role="combobox"]')?.focus();
+    }, 0);
+  }
+
+  // "No": the user is done, so open the Job plans tab.
+  function handleNo() {
+    navigate("/job-plans");
+  }
+
   // ---------- Page ----------
   return (
-    <div className="home">
+    <div className="home" ref={homeRef}>
       {/* Top bar: Upload button + reference dropdown (as in the sketch) */}
       <div className="home-bar">
         <div>
@@ -220,11 +256,6 @@ export default function Home() {
 
       {uploadError && <div className="error">{uploadError}</div>}
       {saveError && <div className="error">{saveError}</div>}
-      {savedJob && (
-        <div className="notice" role="status">
-          Job saved. Total clicks: {fmt(savedJob.total_clicks)}.
-        </div>
-      )}
 
       {/* The form */}
       <form
@@ -320,6 +351,11 @@ export default function Home() {
           </div>
         </div>
       </form>
+
+      {/* The popup appears as soon as the backend confirms the job was saved */}
+      {savedJob && (
+        <SavedJobDialog job={savedJob} onYes={handleYes} onNo={handleNo} />
+      )}
     </div>
   );
 }

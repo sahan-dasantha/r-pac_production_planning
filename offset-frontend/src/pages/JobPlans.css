@@ -1,0 +1,67 @@
+/* ---------- Title row ---------- */
+.page-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.page-head h2 {
+  margin: 0;
+  font-size: 26px;
+}
+.page-sub {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* ---------- Empty state ---------- */
+.empty-jobs {
+  padding: 32px;
+  text-align: center;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.empty-jobs a {
+  color: var(--gold-deep);
+  font-weight: 600;
+}
+
+/* ---------- Table ---------- */
+.table-scroll {
+  overflow-x: auto; /* wide table scrolls inside this box, not the whole page */
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.table-scroll table {
+  border: none;
+}
+
+.jobs-table td {
+  white-space: nowrap;
+}
+.jobs-table td.ref {
+  min-width: 260px;
+  white-space: normal; /* long reference names may wrap */
+  overflow-wrap: anywhere;
+}
+
+/* Numbers line up on the right with equal-width digits */
+.jobs-table th.num,
+.jobs-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.jobs-table td.total {
+  font-weight: 600;
+}
+
+/* The Main sheet table makes column 2 bold (its UPs column).
+   Here column 2 is the Reference, so we undo that. */
+.jobs-table td:nth-child(2) {
+  font-weight: 400;
+}
