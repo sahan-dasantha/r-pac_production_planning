@@ -1,0 +1,157 @@
+/* ---------- Top bar ---------- */
+.home-bar {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.home-bar .combo {
+  flex: 1;
+  min-width: 260px;
+}
+
+.upload-note {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.upload-note .warn {
+  color: var(--danger);
+}
+
+.notice {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: var(--gold-tint);
+  border-left: 3px solid var(--gold-deep);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+/* ---------- The form card ---------- */
+.job-card {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 32px;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--gold);
+  border-radius: 10px;
+}
+.job-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field label,
+.field .label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.job-col input,
+.job-col select {
+  width: 100%;
+}
+
+/* Read-only boxes look flat so they are not mistaken for inputs */
+.readonly {
+  min-height: 42px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.readonly.empty {
+  color: var(--muted);
+}
+.readonly.result {
+  background: var(--gold-wash);
+  font-weight: 600;
+}
+
+.job-actions {
+  margin-top: auto; /* pushes Save to the bottom right */
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+}
+
+/* ---------- Searchable dropdown ---------- */
+.combo {
+  position: relative;
+}
+.combo input {
+  width: 100%;
+  padding-right: 36px;
+}
+.combo-caret {
+  position: absolute;
+  right: 14px;
+  top: 17px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--muted);
+  pointer-events: none;
+}
+.combo-pop {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  max-height: 300px;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(43, 33, 18, 0.12);
+}
+.combo-pop ul {
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+}
+.combo-option {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.combo-option.active {
+  background: var(--gold-tint);
+}
+.combo-option[aria-selected="true"] {
+  font-weight: 600;
+}
+.combo-tag {
+  color: var(--danger);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.combo-empty,
+.combo-more {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ---------- Narrow screens ---------- */
+@media (max-width: 800px) {
+  .job-card {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 16px;
+  }
+}
