@@ -1,8 +1,16 @@
-from rest_framework import filters, mixins, viewsets
+from datetime import date
+from django.db import transaction
+from django.http import HttpResponse
+from rest_framework.parsers import MultiPartParser
+from rest_framework.views import APIView
+from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import Reference, ReferenceHistory, Job, MACHINES
+from .excel import (
+    ExcelReadError, build_jobs_workbook, normalize_name, parse_reference_names,
+)
+from .models import Reference, ReferenceHistory, Job,  ReferenceUpload, UploadedReference, MACHINES
 from .serializers import ReferenceSerializer, ReferenceHistorySerializer, JobSerializer
 
 TRACKED = ["ups", "colours", "sides", "default_machine"]
@@ -44,19 +52,117 @@ class ReferenceViewSet(viewsets.ModelViewSet):
         return Response(MACHINES)
 
 class JobViewSet(
-    mixins.CreateModelMixin,    # POST /api/jobs/       -> save a new job
-    mixins.ListModelMixin,      # GET  /api/jobs/       -> list all jobs
-    mixins.RetrieveModelMixin,  # GET  /api/jobs/<id>/  -> one job
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
     viewsets.GenericViewSet,
 ):
-    """
-    Deliberately no update or delete: a saved job is a record.
-    (If you want to delete mistaken jobs later, we can add it.)
-    """
     queryset = Job.objects.select_related("created_by")
     serializer_class = JobSerializer
 
     def perform_create(self, serializer):
-        # Record which logged-in user saved the job.
         serializer.save(created_by=self.request.user)
+
+    @action(detail=False, methods=["get"])
+    def export(self, request):
+        """GET /api/jobs/export/ -> downloads ALL jobs as an Excel file."""
+        # get_queryset() skips pagination, so every job is included.
+        content = build_jobs_workbook(self.get_queryset())
+
+        response = HttpResponse(
+            content,
+            content_type=(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
+        )
+        # "attachment" tells the browser to download instead of displaying.
+        response["Content-Disposition"] = (
+            f'attachment; filename="job-plans-{date.today():%Y-%m-%d}.xlsx"'
+        )
+        return response
+
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # reject files over 5 MB
+
+
+def dropdown_payload(upload):
+    """
+    Build what the Home dropdown needs: every uploaded name, plus its values
+    from the Main sheet (Reference table) when the name exists there.
+    """
+    if upload is None:
+        return {"upload": None, "references": []}
+
+    # One query: Main-sheet references keyed by their normalised name.
+    lookup = {normalize_name(r.name): r for r in Reference.objects.all()}
+
+    items = []
+    for item in upload.items.all():                  # already in sheet order
+        ref = lookup.get(normalize_name(item.name))  # None if not in Main sheet
+        items.append({
+            "name": item.name,
+            "in_main_sheet": ref is not None,
+            "reference_id": ref.id if ref else None,
+            "ups": ref.ups if ref else None,
+            "colours": ref.colours if ref else None,
+            "sides": ref.sides if ref else None,
+            "default_machine": ref.default_machine if ref else None,
+        })
+
+    matched = sum(1 for i in items if i["in_main_sheet"])
+    return {
+        "upload": {
+            "id": upload.id,
+            "filename": upload.filename,
+            "uploaded_at": upload.uploaded_at.isoformat(),
+            "uploaded_by": upload.uploaded_by.username if upload.uploaded_by else None,
+            "total": len(items),
+            "matched": matched,
+            "missing": len(items) - matched,
+        },
+        "references": items,
+    }
+
+
+class ReferenceUploadView(APIView):
+    """
+    GET  /api/reference-upload/  -> the CURRENT dropdown list (newest upload)
+    POST /api/reference-upload/  -> upload a new sheet (form field: "file")
+    """
+    parser_classes = [MultiPartParser]  # needed to receive file uploads
+
+    def get(self, request):
+        upload = ReferenceUpload.objects.select_related("uploaded_by").first()
+        return Response(dropdown_payload(upload))
+
+    def post(self, request):
+        file = request.FILES.get("file")
+
+        # --- basic checks on the file itself ---
+        if file is None:
+            return Response({"detail": "No file was uploaded."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if not file.name.lower().endswith(".xlsx"):
+            return Response({"detail": "Only .xlsx files are supported."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if file.size > MAX_UPLOAD_BYTES:
+            return Response({"detail": "File is too large (maximum 5 MB)."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # --- read the names; show the user a clear message if it fails ---
+        try:
+            names = parse_reference_names(file)
+        except ExcelReadError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # --- save: all or nothing ---
+        with transaction.atomic():
+            upload = ReferenceUpload.objects.create(
+                filename=file.name, uploaded_by=request.user
+            )
+            UploadedReference.objects.bulk_create([
+                UploadedReference(upload=upload, name=name, position=i)
+                for i, name in enumerate(names)
+            ])
+
+        return Response(dropdown_payload(upload), status=status.HTTP_201_CREATED)    
 # Create your views here.

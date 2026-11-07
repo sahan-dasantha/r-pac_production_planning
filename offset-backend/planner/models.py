@@ -109,4 +109,40 @@ class Job(models.Model):
 
     def __str__(self):
         return f"{self.reference_name} ({self.date})"
+
+class ReferenceUpload(models.Model):
+    """
+    One uploaded Excel sheet. The NEWEST upload is the one that feeds the
+    Home dropdown; older uploads are kept but not shown.
+    """
+    filename = models.CharField(max_length=255)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-uploaded_at"]  # newest first, so .first() = current upload
+
+    def __str__(self):
+        return f"{self.filename} ({self.uploaded_at:%Y-%m-%d %H:%M})"
+
+
+class UploadedReference(models.Model):
+    """
+    One reference name taken from an uploaded sheet.
+    Only the NAME is stored here. UPs, colours and sides always come from
+    the Reference table (the Main sheet data).
+    """
+    upload = models.ForeignKey(
+        ReferenceUpload, on_delete=models.CASCADE, related_name="items"
+    )
+    name = models.CharField(max_length=255)
+    position = models.PositiveIntegerField()  # keeps the order of the sheet
+
+    class Meta:
+        ordering = ["position"]
+
+    def __str__(self):
+        return self.name    
 # Create your models here.
