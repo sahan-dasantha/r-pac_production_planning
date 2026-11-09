@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { downloadJobsExcel, listJobs } from "../api/jobs";
+import { deleteJob, downloadJobsExcel, listJobs } from "../api/jobs";
+import ConfirmDeleteDialog from "../Components/ConfirmDeleteDialog"; // NEW
+import JobEditModal from "../Components/JobEditModal"; // NEW
 import { isoToDisplay, todayISO } from "../utils/dates";
+import { errorMessage } from "../utils/errors"; // NEW
 import "./JobPlans.css";
 
 // 1563 -> "1,563"
@@ -19,13 +22,26 @@ export default function JobPlans() {
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(false);
 
+  // NEW: edit / delete state
+  const [reload, setReload] = useState(0); // change it to re-fetch the list
+  const [editing, setEditing] = useState(null); // the job open in the edit popup
+  const [deleting, setDeleting] = useState(null); // the job in the delete popup
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [flash, setFlash] = useState(""); // "Job updated." message
+
   // ---------- Load the jobs whenever the page number changes ----------
   useEffect(() => {
     let cancelled = false; // ignore a late answer if the user already moved on
+    console.log("JOBS fetch start:", { page, reload }); // DEBUG
     setLoading(true);
 
     listJobs(page)
       .then((d) => {
+        console.log(
+          "JOBS fetch result:",
+          d.results.map((j) => [j.id, j.quantity]),
+        ); // DEBUG
         if (!cancelled) {
           setData(d);
           setError("");
@@ -41,7 +57,51 @@ export default function JobPlans() {
     return () => {
       cancelled = true;
     };
-  }, [page]);
+  }, [page, reload]);
+
+  // NEW: hide the green message after 4 seconds
+  useEffect(() => {
+    if (!flash) return;
+    const timer = setTimeout(() => setFlash(""), 4000);
+    return () => clearTimeout(timer);
+  }, [flash]);
+
+  // ---------- after the edit popup saved successfully ----------
+  function handleEdited(updated) {
+    console.log("handleEdited got:", updated); // DEBUG
+    // 1. Replace that one row right away, so the table changes instantly.
+    setData((d) => ({
+      ...d,
+      results: d.results.map((j) => (j.id === updated.id ? updated : j)),
+    }));
+    setEditing(null);
+    setFlash("Job updated.");
+
+    // 2. Also fetch the list again, so the table matches the database exactly.
+    setReload((n) => n + 1);
+  }
+  // ---------- NEW: the user confirmed the delete ----------
+  async function confirmDelete() {
+    setDeleteBusy(true);
+    setDeleteError("");
+    try {
+      await deleteJob(deleting.id);
+    } catch (err) {
+      // 404 means someone else already deleted it: the goal is reached anyway.
+      if (err.response?.status !== 404) {
+        setDeleteError(errorMessage(err, "Could not delete the job"));
+        setDeleteBusy(false);
+        return; // keep the popup open so the user can retry
+      }
+    }
+    setDeleteBusy(false);
+    setDeleting(null);
+    setFlash("Job deleted.");
+
+    // If that was the only job on this page, step back one page.
+    if (data.results.length === 1 && page > 1) setPage(page - 1);
+    else setReload((n) => n + 1);
+  }
 
   // ---------- Download the Excel file ----------
   async function handleDownload() {
@@ -94,6 +154,11 @@ export default function JobPlans() {
       </div>
 
       {error && <div className="error">{error}</div>}
+      {flash && (
+        <div className="flash" role="status">
+          {flash}
+        </div>
+      )}
 
       {/* Empty state: nothing has been saved yet */}
       {noJobs && (
@@ -119,6 +184,8 @@ export default function JobPlans() {
                 <th className="num">Total impressions</th>
                 <th className="num">Total clicks</th>
                 <th>Saved by</th>
+                <th></th>
+                {/* NEW: buttons column */}
               </tr>
             </thead>
             <tbody>
@@ -137,6 +204,24 @@ export default function JobPlans() {
                   {/* Hovering shows exactly when the job was saved */}
                   <td title={new Date(job.created_at).toLocaleString()}>
                     {job.created_by}
+                  </td>
+                  {/* NEW: Edit and Delete buttons for this row */}
+                  <td className="row-actions">
+                    <button
+                      className="secondary"
+                      onClick={() => setEditing(job)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="secondary danger-text"
+                      onClick={() => {
+                        setDeleteError("");
+                        setDeleting(job);
+                      }}
+                    >
+                      Delete
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -164,6 +249,23 @@ export default function JobPlans() {
             Next
           </button>
         </div>
+      )}
+      {/* NEW: the two popups */}
+      {editing && (
+        <JobEditModal
+          job={editing}
+          onClose={() => setEditing(null)}
+          onSaved={handleEdited}
+        />
+      )}
+      {deleting && (
+        <ConfirmDeleteDialog
+          job={deleting}
+          busy={deleteBusy}
+          error={deleteError}
+          onCancel={() => setDeleting(null)}
+          onConfirm={confirmDelete}
+        />
       )}
     </>
   );

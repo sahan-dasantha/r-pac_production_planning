@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from .excel import (
     ExcelReadError, build_jobs_workbook, normalize_name, parse_reference_names,
 )
-from .models import Reference, ReferenceHistory, Job,  ReferenceUpload, UploadedReference, MACHINES
+from .models import Reference, ReferenceHistory, Job, JobLog,  ReferenceUpload, UploadedReference, MACHINES
 from .serializers import ReferenceSerializer, ReferenceHistorySerializer, JobSerializer
 
 TRACKED = ["ups", "colours", "sides", "default_machine"]
@@ -51,17 +51,72 @@ class ReferenceViewSet(viewsets.ModelViewSet):
     def machines(self, request):
         return Response(MACHINES)
 
+# Fields we record in the log when a job is edited.
+TRACKED_JOB_FIELDS = ["date", "quantity", "machine", "total_clicks"]
+
 class JobViewSet(
-    mixins.CreateModelMixin,
-    mixins.ListModelMixin,
-    mixins.RetrieveModelMixin,
+    mixins.CreateModelMixin,    # POST   /api/jobs/       -> save a job
+    mixins.ListModelMixin,      # GET    /api/jobs/       -> list jobs
+    mixins.RetrieveModelMixin,  # GET    /api/jobs/<id>/  -> one job
+    mixins.UpdateModelMixin,    # PATCH  /api/jobs/<id>/  -> edit a job
+    mixins.DestroyModelMixin,   # DELETE /api/jobs/<id>/  -> delete a job
     viewsets.GenericViewSet,
 ):
     queryset = Job.objects.select_related("created_by")
     serializer_class = JobSerializer
+    # No PUT: only partial edits (PATCH) are allowed.
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        # Remember the old values BEFORE saving. Everything is stored as text
+        # so it can go into the JSON log (dates are not JSON-friendly).
+        old = {f: str(getattr(serializer.instance, f)) for f in TRACKED_JOB_FIELDS}
+
+        # atomic = the edit and its log line are saved together, or not at all.
+        with transaction.atomic():
+            # Job.save() recalculates impressions and clicks automatically.
+            job = serializer.save()
+
+            changes = {
+                f: [old[f], str(getattr(job, f))]
+                for f in TRACKED_JOB_FIELDS
+                if old[f] != str(getattr(job, f))
+            }
+            if changes:  # nothing changed -> nothing to log
+                JobLog.objects.create(
+                    job_id=job.id,
+                    reference_name=job.reference_name,
+                    action="edited",
+                    details=changes,
+                    user=self.request.user,
+                )
+
+    def perform_destroy(self, instance):
+        with transaction.atomic():
+            # Write the log FIRST: after delete() the job's id is gone.
+            JobLog.objects.create(
+                job_id=instance.id,
+                reference_name=instance.reference_name,
+                action="deleted",
+                details={
+                    "date": str(instance.date),
+                    "quantity": instance.quantity,
+                    "machine": instance.machine,
+                    "ups": instance.ups,
+                    "colours": instance.colours,
+                    "sides": instance.sides,
+                    "impressions": instance.impressions,
+                    "total_impressions": instance.total_impressions,
+                    "total_clicks": instance.total_clicks,
+                    "saved_by": instance.created_by.username if instance.created_by else None,
+                    "saved_at": instance.created_at.isoformat(),
+                },
+                user=self.request.user,
+            )
+            instance.delete()                
 
     @action(detail=False, methods=["get"])
     def export(self, request):

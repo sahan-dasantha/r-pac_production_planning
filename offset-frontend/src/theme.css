@@ -96,3 +96,14 @@ button.secondary:hover:not(:disabled) {
   color: var(--danger);
   font-size: 12px;
 }
+
+/* Red button for destructive actions (Delete) */
+button.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+button.danger:hover:not(:disabled) {
+  background: #7f2218;
+  border-color: #7f2218;
+}

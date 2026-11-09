@@ -27,3 +27,11 @@ export const listJobs = (page = 1) =>
 // responseType "blob" tells axios this is a file, not JSON text.
 export const downloadJobsExcel = () =>
   api.get("/jobs/export/", { responseType: "blob" }).then((r) => r.data);
+
+// PATCH /api/jobs/<id>/ -> change date, quantity and/or machine.
+// Send only the fields you want to change.
+export const updateJob = (id, data) =>
+  api.patch(`/jobs/${id}/`, data).then((r) => r.data);
+
+// DELETE /api/jobs/<id>/ -> remove one job (returns nothing on success)
+export const deleteJob = (id) => api.delete(`/jobs/${id}/`);

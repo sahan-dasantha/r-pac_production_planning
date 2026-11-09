@@ -144,5 +144,30 @@ class UploadedReference(models.Model):
         ordering = ["position"]
 
     def __str__(self):
-        return self.name    
+        return self.name 
+
+class JobLog(models.Model):
+    """
+    One line in the audit trail: a job was edited or deleted.
+    job_id is a plain number (not a ForeignKey) on purpose, so the log
+    survives after the job itself is deleted.
+    """
+    ACTIONS = [("edited", "Edited"), ("deleted", "Deleted")]
+
+    job_id = models.PositiveIntegerField()
+    reference_name = models.CharField(max_length=255)
+    action = models.CharField(max_length=10, choices=ACTIONS)
+    # edited  -> {"quantity": ["50000", "60000"], ...}  (old, new)
+    # deleted -> the job's full details at the moment it was deleted
+    details = models.JSONField()
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL
+    )
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-at"]  # newest first
+
+    def __str__(self):
+        return f"{self.action} job {self.job_id} ({self.reference_name})"       
 # Create your models here.

@@ -65,3 +65,63 @@
 .jobs-table td:nth-child(2) {
   font-weight: 400;
 }
+
+/* ---------- Row buttons ---------- */
+.row-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+.row-actions button {
+  padding: 5px 10px;
+  font-size: 13px;
+  margin-left: 6px;
+}
+button.danger-text {
+  color: var(--danger);
+}
+
+/* ---------- "Job updated / deleted" message ---------- */
+.flash {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: var(--gold-tint);
+  border-left: 3px solid var(--gold-deep);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+/* ---------- Edit and delete popups ---------- */
+.edit-ro {
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.edit-hint {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.edit-preview {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--gold-wash);
+  border-left: 3px solid var(--gold);
+  border-radius: 4px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.edit-preview div {
+  display: flex;
+  justify-content: space-between;
+}
+.delete-summary {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--gold-wash);
+  border-left: 3px solid var(--gold);
+  border-radius: 4px;
+  font-size: 14px;
+}

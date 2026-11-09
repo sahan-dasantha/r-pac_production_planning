@@ -45,4 +45,14 @@ class JobSerializer(serializers.ModelSerializer):
             "reference_name", "ups", "colours", "sides",
             "impressions", "total_impressions", "total_clicks",
             "created_by", "created_at",
-        ]        
+        ]
+        def validate_reference(self, value):
+        # When editing a saved job (self.instance exists), the reference
+        # must stay the same. Creating a new job is not affected.
+            if self.instance is not None and value != self.instance.reference:
+                raise serializers.ValidationError(
+                "The reference of a saved job cannot be changed. "
+                "Delete the job and add a new one."
+            )
+            return value    
+                
