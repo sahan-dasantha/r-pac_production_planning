@@ -62,7 +62,6 @@ export default function MainSheet() {
             <th>UPs</th>
             <th>Colours</th>
             <th>Sides</th>
-            <th>Machine</th>
             <th>Last updated</th>
             <th></th>
           </tr>
@@ -74,7 +73,6 @@ export default function MainSheet() {
               <td>{r.ups}</td>
               <td>{r.colours}</td>
               <td>{r.sides}</td>
-              <td>{r.default_machine}</td>
               <td>
                 {new Date(r.updated_at).toLocaleDateString()}
                 {r.updated_by ? ` · ${r.updated_by}` : ""}
@@ -88,7 +86,7 @@ export default function MainSheet() {
           ))}
           {!loading && data.results.length === 0 && (
             <tr>
-              <td colSpan="7" className="empty">
+              <td colSpan="6" className="empty">
                 No references found.
               </td>
             </tr>
