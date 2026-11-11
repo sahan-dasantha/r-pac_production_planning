@@ -1,34 +1,18 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getMachines } from "../api/references";
-import {
-  createJob,
-  getUploadedReferences,
-  uploadReferences,
-} from "../api/jobs";
+import { createJob, getUploadedReferences, uploadReferences } from "../api/jobs";
 import ReferenceSelect from "../Components/ReferenceSelect";
+import SavedJobDialog from "../Components/SavedJobDialog";
 import { calculate, MAX_DB_INT } from "../utils/calc";
 import { formatDateInput, parseDateInput } from "../utils/dates";
+import { errorMessage } from "../utils/errors";
 import "./Home.css";
-import { useNavigate } from "react-router-dom"; // used to jump to Job plans
-import SavedJobDialog from "../Components/SavedJobDialog";
 
-// Turns a backend error response into one readable sentence.
-function errorMessage(err, fallback) {
-  const data = err.response?.data;
-  if (!data) return "Cannot reach the server"; // network problem
-  if (typeof data === "string") return fallback; // unexpected HTML error page
-  if (data.detail) return data.detail; // e.g. "Only .xlsx files..."
-  // Field errors look like { quantity: ["..."] }
-  const text = Object.entries(data)
-    .map(([field, msgs]) => `${field}: ${[].concat(msgs).join(" ")}`)
-    .join(" ");
-  return text || fallback;
-}
-
-// Formats numbers with commas: 1563 -> "1,563"
+// 1563 -> "1,563"   (null/undefined -> "")
 const fmt = (n) => (n == null ? "" : n.toLocaleString("en-US"));
 
-// A label with its content and an optional red error line underneath.
+// A label, the input(s) inside it, and an optional red error line.
 function Field({ label, htmlFor, error, children }) {
   return (
     <div className="field">
@@ -43,41 +27,43 @@ function Field({ label, htmlFor, error, children }) {
   );
 }
 
-// A read-only value box. Shows "-" until there is something to show.
-function ReadOnly({ value, result }) {
+// One box in the dark "Job breakdown" panel.
+//   wide   = spans the full row (used for the reference name)
+//   accent = gold highlight (used for Total clicks)
+function Tile({ label, value, note, wide, accent }) {
   const empty = value === null || value === undefined || value === "";
   return (
-    <div
-      className={`readonly${empty ? " empty" : ""}${result ? " result" : ""}`}
-    >
-      {empty ? "-" : value}
+    <div className={`tile${wide ? " wide" : ""}${accent ? " accent" : ""}`}>
+      <div className="tile-label">{label}</div>
+      <div className={`tile-value${empty ? " dim" : ""}`}>{empty ? "-" : value}</div>
+      {note && <div className="tile-note">{note}</div>}
     </div>
   );
 }
 
 export default function Home() {
-  const navigate = useNavigate(); // moves to another tab
-  const homeRef = useRef(null); // lets us find the dropdown to focus it
+  const navigate = useNavigate();   // moves to another tab
+  const homeRef = useRef(null);     // lets us focus the dropdown after "Yes"
 
   // ---------- Reference list (from the uploaded Excel sheet) ----------
-  const [upload, setUpload] = useState(null); // info about the newest upload
-  const [refs, setRefs] = useState([]); // the dropdown options
+  const [upload, setUpload] = useState(null);      // info about the newest upload
+  const [refs, setRefs] = useState([]);            // the dropdown options
   const [loadingRefs, setLoadingRefs] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
-  const fileInput = useRef(null); // the hidden file picker
+  const fileInput = useRef(null);                  // the hidden file picker
 
-  const [machines, setMachines] = useState([]); // machine dropdown options
+  const [machines, setMachines] = useState([]);    // machine dropdown options
 
   // ---------- The form ----------
-  const [selected, setSelected] = useState(null); // chosen reference option
-  const [dateText, setDateText] = useState(""); // "DD/MM/YYYY" as typed
+  const [selected, setSelected] = useState(null);  // chosen reference option
+  const [dateText, setDateText] = useState("");    // "DD/MM/YYYY" as typed
   const [quantityText, setQuantityText] = useState("");
   const [machine, setMachine] = useState("");
   const [attempted, setAttempted] = useState(false); // has Save been clicked?
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [savedJob, setSavedJob] = useState(null); // Part 5 replaces this with a popup
+  const [savedJob, setSavedJob] = useState(null);  // set after saving -> popup opens
 
   // ---------- Load data once when the page opens ----------
   useEffect(() => {
@@ -89,9 +75,7 @@ export default function Home() {
       .catch(() => setUploadError("Could not load the reference list"))
       .finally(() => setLoadingRefs(false));
 
-    getMachines()
-      .then(setMachines)
-      .catch(() => {});
+    getMachines().then(setMachines).catch(() => {});
   }, []);
 
   // ---------- Upload an Excel sheet ----------
@@ -119,7 +103,6 @@ export default function Home() {
   // ---------- The user picks a reference ----------
   function handleSelect(option) {
     setSelected(option);
-    setSavedJob(null);
     setSaveError("");
     // Pre-select the reference's usual machine; the user can still change it.
     const usual = option.default_machine;
@@ -140,14 +123,32 @@ export default function Home() {
     inMain && quantity >= 1 ? calculate(quantity, ups, sides, colours) : null;
   const tooLarge = result !== null && result.totalClicks > MAX_DB_INT;
 
-  // What is wrong with the form right now (shown after Save is clicked)
+  // What is wrong with the form right now
   const problems = {};
   if (!selected) problems.reference = "Select a reference";
   if (!dateISO) problems.date = "Enter a valid date as DD/MM/YYYY";
   if (quantity < 1) problems.quantity = "Enter a quantity of 1 or more";
   else if (tooLarge) problems.quantity = "This quantity is too large";
   if (!machine) problems.machine = "Select a machine";
+  // Red messages appear only after the user has clicked Save once.
   const show = (field) => (attempted ? problems[field] : undefined);
+
+  // ---------- The status line next to the Save button ----------
+  let statusText;
+  let statusTone; // "idle" (grey dot), "ready" (green dot), "warn" (red dot)
+  if (!selected) {
+    statusText = "Select a reference to begin";
+    statusTone = "idle";
+  } else if (!inMain) {
+    statusText = "Add this reference in the Main sheet tab first";
+    statusTone = "warn";
+  } else if (Object.keys(problems).length > 0) {
+    statusText = "Complete the date, quantity and machine";
+    statusTone = "idle";
+  } else {
+    statusText = "Ready to save this job";
+    statusTone = "ready";
+  }
 
   // ---------- Save ----------
   async function handleSave() {
@@ -162,11 +163,11 @@ export default function Home() {
     try {
       const job = await createJob({
         reference: selected.reference_id, // id from the Main sheet data
-        date: dateISO, // YYYY-MM-DD
+        date: dateISO,                    // YYYY-MM-DD
         quantity,
         machine,
       });
-      setSavedJob(job); // Part 5: open the "Add another job?" popup here
+      setSavedJob(job); // opens the "Add another job?" popup
     } catch (err) {
       setSaveError(errorMessage(err, "Could not save the job"));
     } finally {
@@ -174,30 +175,27 @@ export default function Home() {
     }
   }
 
-  // Empty every field so the next job starts from a blank form.
-  // The uploaded reference list is kept, so there is no need to upload again.
+  // Empty every field. The uploaded reference list is kept.
   function clearForm() {
     setSelected(null);
-    setDateText(""); // delete this line if you want the date to stay
+    setDateText("");
     setQuantityText("");
     setMachine("");
     setAttempted(false);
     setSaveError("");
-    setSavedJob(null); // this is what closes the popup
+    setSavedJob(null); // this also closes the popup
   }
 
-  // "Yes": clear the form and get ready for the next job.
+  // Popup "Yes": clear the form and put the cursor in the reference dropdown.
   function handleYes() {
     clearForm();
     window.scrollTo({ top: 0 });
-    // Wait a moment for the popup to disappear, then put the cursor
-    // in the reference dropdown.
     setTimeout(() => {
       homeRef.current?.querySelector('[role="combobox"]')?.focus();
     }, 0);
   }
 
-  // "No": the user is done, so open the Job plans tab.
+  // Popup "No": the user is done, so open the Job plans tab.
   function handleNo() {
     navigate("/job-plans");
   }
@@ -205,101 +203,22 @@ export default function Home() {
   // ---------- Page ----------
   return (
     <div className="home" ref={homeRef}>
-      {/* Top bar: Upload button + reference dropdown (as in the sketch) */}
-      <div className="home-bar">
-        <div>
-          <input
-            ref={fileInput}
-            type="file"
-            accept=".xlsx"
-            hidden
-            onChange={handleFile}
-          />
-          <button
-            type="button"
-            onClick={() => fileInput.current.click()}
-            disabled={uploading}
-          >
-            {uploading ? "Uploading..." : "Upload"}
-          </button>
-        </div>
-
-        <ReferenceSelect
-          options={refs}
-          value={selected}
-          onChange={handleSelect}
-          disabled={refs.length === 0}
-          placeholder={
-            loadingRefs
-              ? "Loading references..."
-              : refs.length === 0
-                ? "Upload a sheet first"
-                : "Select reference"
-          }
-        />
-      </div>
-
-      {/* One line telling the user which sheet is in use */}
-      <p className="upload-note">
-        {loadingRefs
-          ? "Loading..."
-          : upload
-            ? `${upload.filename}: ${upload.total} references`
-            : "No Excel sheet uploaded yet. It needs a column headed 'References'."}
-        {upload && upload.missing > 0 && (
-          <span className="warn">
-            {" "}
-            ({upload.missing} not in the Main sheet)
-          </span>
-        )}
-      </p>
-
-      {uploadError && <div className="error">{uploadError}</div>}
-      {saveError && <div className="error">{saveError}</div>}
-
-      {/* The form */}
+      {/* One form around both columns, so Enter in a field also saves */}
       <form
-        className="job-card"
+        className="home-grid"
         onSubmit={(e) => {
           e.preventDefault();
           handleSave();
         }}
         noValidate
       >
-        {/* Left column: values that come from the Main sheet or are calculated */}
-        <div className="job-col">
-          <Field
-            label="Reference"
-            error={
-              selected && !inMain
-                ? "This reference is not in the Main sheet. Add it in the Main sheet tab first."
-                : show("reference")
-            }
-          >
-            <ReadOnly value={selected?.name} />
-          </Field>
-          <Field label="Number of ups">
-            <ReadOnly value={fmt(ups)} />
-          </Field>
-          <Field label="Number of colours">
-            <ReadOnly value={fmt(colours)} />
-          </Field>
-          <Field label="Number of sides">
-            <ReadOnly value={fmt(sides)} />
-          </Field>
-          <Field label="Impressions">
-            <ReadOnly value={fmt(result?.impressions)} result />
-          </Field>
-          <Field label="Total impressions">
-            <ReadOnly value={fmt(result?.totalImpressions)} result />
-          </Field>
-          <Field label="Total clicks">
-            <ReadOnly value={fmt(result?.totalClicks)} result />
-          </Field>
-        </div>
+        {/* ===== LEFT: what the user enters ===== */}
+        <section className="entry-card" aria-labelledby="entry-title">
+          <div className="card-head">
+            <h2 id="entry-title">Job details</h2>
+            <span className="card-tag">Input required</span>
+          </div>
 
-        {/* Right column: what the user types or chooses */}
-        <div className="job-col">
           <Field label="Date" htmlFor="job-date" error={show("date")}>
             <input
               id="job-date"
@@ -312,20 +231,56 @@ export default function Home() {
           </Field>
 
           <Field
-            label="Quantity"
-            htmlFor="job-quantity"
-            error={show("quantity")}
+            label="Reference"
+            error={
+              selected && !inMain
+                ? "This reference is not in the Main sheet. Add it in the Main sheet tab first."
+                : show("reference")
+            }
           >
-            <input
-              id="job-quantity"
-              inputMode="numeric"
-              autoComplete="off"
-              value={quantityText}
-              // keep digits only, max 9 characters
-              onChange={(e) =>
-                setQuantityText(e.target.value.replace(/\D/g, "").slice(0, 9))
+            <ReferenceSelect
+              options={refs}
+              value={selected}
+              onChange={handleSelect}
+              disabled={refs.length === 0}
+              placeholder={
+                loadingRefs
+                  ? "Loading references..."
+                  : refs.length === 0
+                  ? "Upload a sheet first"
+                  : "Select reference"
               }
             />
+
+            {/* Upload button and a one-line note about the sheet in use */}
+            <div className="upload-row">
+              <span className="upload-note">
+                {loadingRefs
+                  ? "Loading..."
+                  : upload
+                  ? `${upload.filename}: ${upload.total} references`
+                  : "No Excel sheet uploaded yet. It needs a column headed 'References'."}
+                {upload && upload.missing > 0 && (
+                  <span className="warn"> ({upload.missing} not in the Main sheet)</span>
+                )}
+              </span>
+              <input
+                ref={fileInput}
+                type="file"
+                accept=".xlsx"
+                hidden
+                onChange={handleFile}
+              />
+              <button
+                type="button"
+                className="secondary small"
+                onClick={() => fileInput.current.click()}
+                disabled={uploading}
+              >
+                {uploading ? "Uploading..." : "Upload sheet"}
+              </button>
+            </div>
+            {uploadError && <div className="error">{uploadError}</div>}
           </Field>
 
           <Field label="Machine" htmlFor="job-machine" error={show("machine")}>
@@ -336,14 +291,87 @@ export default function Home() {
             >
               <option value="">Select machine</option>
               {machines.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
+                <option key={m} value={m}>{m}</option>
               ))}
             </select>
+            {selected?.default_machine && (
+              <div className="hint">Pre-selected from the reference. You can change it.</div>
+            )}
           </Field>
 
-          <div className="job-actions">
+          <Field label="Quantity" htmlFor="job-quantity" error={show("quantity")}>
+            <div className="with-suffix">
+              <input
+                id="job-quantity"
+                inputMode="numeric"
+                autoComplete="off"
+                value={quantityText}
+                // keep digits only, max 9 characters
+                onChange={(e) =>
+                  setQuantityText(e.target.value.replace(/\D/g, "").slice(0, 9))
+                }
+              />
+              <span>units</span>
+            </div>
+          </Field>
+
+          <div className="entry-foot">
+            <button type="button" className="link-btn" onClick={clearForm}>
+              Clear inputs
+            </button>
+            <span className="hint">Results update as you type</span>
+          </div>
+        </section>
+
+        {/* ===== RIGHT: the read-only breakdown and the Save bar ===== */}
+        <div className="home-right">
+          <section className="breakdown" aria-label="Job breakdown">
+            <div className="card-head dark">
+              <div>
+                <h2>Job breakdown</h2>
+                <p>Values from the Main sheet, and calculated from your quantity</p>
+              </div>
+              <span className="pill">Auto computed</span>
+            </div>
+
+            {/* Row 1: the reference, then its three Main sheet values */}
+            <div className="tiles">
+              <Tile
+                wide
+                label="Reference"
+                value={selected?.name}
+                note={selected && !inMain ? "Not in the Main sheet" : undefined}
+              />
+              <Tile label="Number of ups" value={fmt(ups)} note="From the Main sheet" />
+              <Tile label="Number of colours" value={fmt(colours)} note="From the Main sheet" />
+              <Tile label="Number of sides" value={fmt(sides)} note="From the Main sheet" />
+            </div>
+
+            {/* Row 2: the three calculated results */}
+            <div className="tiles results">
+              <Tile
+                label="Impressions"
+                value={fmt(result?.impressions)}
+                note="Quantity ÷ ups, rounded up"
+              />
+              <Tile
+                label="Total impressions"
+                value={fmt(result?.totalImpressions)}
+                note="Impressions × sides"
+              />
+              <Tile
+                accent
+                label="Total clicks"
+                value={fmt(result?.totalClicks)}
+                note="Total impressions × colours"
+              />
+            </div>
+          </section>
+
+          {saveError && <div className="error">{saveError}</div>}
+
+          <div className="save-bar">
+            <span className={`status ${statusTone}`} role="status">{statusText}</span>
             {/* Disabled while saving, or when the reference is not in the Main sheet */}
             <button type="submit" disabled={saving || (selected && !inMain)}>
               {saving ? "Saving..." : "Save"}
@@ -359,3 +387,5 @@ export default function Home() {
     </div>
   );
 }
+
+

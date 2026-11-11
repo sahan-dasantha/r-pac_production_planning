@@ -1,51 +1,46 @@
-/* ---------- Top bar ---------- */
-.home-bar {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
-}
-.home-bar .combo {
-  flex: 1;
-  min-width: 260px;
-}
-
-.upload-note {
-  margin: 0 0 16px;
-  color: var(--muted);
-  font-size: 13px;
-}
-.upload-note .warn {
-  color: var(--danger);
+/* =====================================================
+   HOME PAGE
+   Colours not listed here come from the variables in theme.css.
+   The dark panel's own colours are defined once, just below.
+   ===================================================== */
+.home {
+  --panel: #2B2112;        /* dark panel background (same as the header bar) */
+  --tile: #382C19;         /* tiles inside the panel */
+  --tile-line: #4C3C20;    /* tile borders and dividers */
+  --tile-text: #CDBB8E;    /* soft text on the dark panel */
+  --cream: #FBF6E6;        /* main text on the dark panel */
 }
 
-.notice {
-  margin-bottom: 16px;
-  padding: 10px 12px;
-  background: var(--gold-tint);
-  border-left: 3px solid var(--gold-deep);
-  border-radius: 4px;
-  font-size: 14px;
-}
-
-/* ---------- The form card ---------- */
-.job-card {
+/* ---------- Two-column layout ---------- */
+.home-grid {
   display: grid;
-  grid-template-columns: 1.3fr 1fr;
-  gap: 32px;
-  padding: 24px;
+  grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.home-right { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+/* ---------- Left card: Job details ---------- */
+.entry-card {
+  padding: 20px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-top: 4px solid var(--gold);
-  border-radius: 10px;
+  border-radius: 12px;
 }
-.job-col {
+.card-head {
   display: flex;
-  flex-direction: column;
-  gap: 14px;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
 }
+.card-head h2 { margin: 0; font-size: 20px; }
+.card-tag { color: var(--muted); font-size: 12px; white-space: nowrap; }
 
+.field + .field { margin-top: 14px; }
 .field label,
 .field .label {
   display: block;
@@ -53,44 +48,149 @@
   font-size: 13px;
   font-weight: 500;
 }
-.job-col input,
-.job-col select {
-  width: 100%;
+.entry-card input,
+.entry-card select { width: 100%; }
+.hint { margin-top: 4px; color: var(--muted); font-size: 12px; }
+
+/* Upload button and sheet note, under the dropdown */
+.upload-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.upload-note {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.upload-note .warn { color: var(--danger); }
+button.small { padding: 6px 12px; font-size: 13px; white-space: nowrap; }
+
+/* Quantity box with a "units" label inside the right edge */
+.with-suffix { position: relative; }
+.with-suffix input {
+  padding-right: 60px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.with-suffix span {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 12px;
+  pointer-events: none;
 }
 
-/* Read-only boxes look flat so they are not mistaken for inputs */
-.readonly {
-  min-height: 42px;
-  padding: 10px 12px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 6px;
+.entry-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.entry-foot .hint { margin: 0; }
+.home .link-btn,
+.home .link-btn:hover:not(:disabled) {
+  padding: 4px 2px;
+  background: none;
+  border: none;
+  color: var(--gold-deep);
+  font-weight: 500;
+}
+.home .link-btn:hover:not(:disabled) { text-decoration: underline; }
+
+/* ---------- Right: dark "Job breakdown" panel ---------- */
+.breakdown {
+  padding: 20px;
+  background: var(--panel);
+  border-bottom: 3px solid var(--gold);
+  border-radius: 12px;
+  color: var(--cream);
+}
+.card-head.dark { border-bottom-color: var(--tile-line); }
+.card-head.dark h2 { color: var(--gold); }
+.card-head.dark p { margin: 2px 0 0; color: var(--tile-text); font-size: 13px; }
+.pill {
+  padding: 3px 10px;
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  color: var(--gold);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.tiles.results {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--tile-line);
+}
+.tile {
+  padding: 14px 16px;
+  background: var(--tile);
+  border: 1px solid var(--tile-line);
+  border-radius: 10px;
+  min-width: 0;
+}
+.tile.wide { grid-column: 1 / -1; }
+.tile-label { color: var(--tile-text); font-size: 12px; font-weight: 500; }
+.tile-value {
+  margin-top: 4px;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
-.readonly.empty {
-  color: var(--muted);
-}
-.readonly.result {
-  background: var(--gold-wash);
-  font-weight: 600;
-}
+.tile-value.dim { color: var(--tile-text); font-weight: 400; }
+.tile.wide .tile-value { font-size: 17px; line-height: 1.35; }
+.tile-note { margin-top: 4px; color: var(--tile-text); font-size: 12px; }
 
-.job-actions {
-  margin-top: auto; /* pushes Save to the bottom right */
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 8px;
+/* Total clicks tile: gold highlight */
+.tile.accent {
+  background: rgba(212, 167, 44, 0.12);
+  border-color: var(--gold);
 }
+.tile.accent .tile-value:not(.dim) { color: var(--gold); }
+
+/* ---------- Save bar ---------- */
+.save-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.status { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+.status::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #B9AC87;
+}
+.status.ready::before { background: #2F7D4F; }
+.status.warn { color: var(--danger); }
+.status.warn::before { background: var(--danger); }
+.save-bar button { padding: 12px 32px; font-size: 16px; }
 
 /* ---------- Searchable dropdown ---------- */
-.combo {
-  position: relative;
-}
-.combo input {
-  width: 100%;
-  padding-right: 36px;
-}
+.combo { position: relative; }
+.combo input { width: 100%; padding-right: 36px; }
 .combo-caret {
   position: absolute;
   right: 14px;
@@ -115,11 +215,7 @@
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(43, 33, 18, 0.12);
 }
-.combo-pop ul {
-  margin: 0;
-  padding: 4px;
-  list-style: none;
-}
+.combo-pop ul { margin: 0; padding: 4px; list-style: none; }
 .combo-option {
   display: flex;
   justify-content: space-between;
@@ -129,37 +225,14 @@
   font-size: 14px;
   cursor: pointer;
 }
-.combo-option.active {
-  background: var(--gold-tint);
-}
-.combo-option[aria-selected="true"] {
-  font-weight: 600;
-}
-.combo-tag {
-  color: var(--danger);
-  font-size: 12px;
-  white-space: nowrap;
-}
+.combo-option.active { background: var(--gold-tint); }
+.combo-option[aria-selected="true"] { font-weight: 600; }
+.combo-tag { color: var(--danger); font-size: 12px; white-space: nowrap; }
 .combo-empty,
-.combo-more {
-  padding: 10px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-/* ---------- Narrow screens ---------- */
-@media (max-width: 800px) {
-  .job-card {
-    grid-template-columns: 1fr;
-    gap: 20px;
-    padding: 16px;
-  }
-}
+.combo-more { padding: 10px; color: var(--muted); font-size: 13px; }
 
 /* ---------- "Job saved" popup ---------- */
-.saved-dialog {
-  width: min(420px, 100%);
-}
+.saved-dialog { width: min(420px, 100%); }
 .saved-summary {
   margin: 0;
   padding: 10px 12px;
@@ -169,11 +242,15 @@
   font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
-.saved-ref {
-  font-weight: 600;
-  overflow-wrap: anywhere;
+.saved-ref { font-weight: 600; overflow-wrap: anywhere; }
+.saved-question { margin: 12px 0 0; font-size: 16px; }
+
+/* ---------- Narrow screens ---------- */
+@media (max-width: 900px) {
+  .home-grid { grid-template-columns: 1fr; }
 }
-.saved-question {
-  margin: 12px 0 0;
-  font-size: 16px;
+@media (max-width: 600px) {
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tiles.results { grid-template-columns: 1fr; }
+  .tile-value { font-size: 22px; }
 }
