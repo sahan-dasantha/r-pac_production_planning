@@ -3,7 +3,7 @@ from django.core.validators import MinValueValidator
 from django.db import models
 
 MACHINES = [
-    "7 - K", "RANPATH", "SM - B", "SM - C",
+    "7 - K", "RANPATH", "SM - A", "SM - B", "SM - C",
     "FROM BULK", "SCREEN", "PRINT CARE", "GUILLOTINE",
 ]
 
