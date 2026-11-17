@@ -1,17 +1,21 @@
 import { useEffect, useId, useRef } from "react";
-import { isoToDisplay } from "../utils/dates";
 
 /**
- * "Delete this job?" confirmation popup.
+ * A "Delete this ...?" confirmation popup, used by Job plans and Main sheet.
+ *
  * Props:
- *   job       - the job about to be deleted
+ *   title     - e.g. "Delete this job plan?"
+ *   children  - the summary of what is about to be deleted (shown in a box)
+ *   note      - a small grey explanation under the summary
  *   busy      - true while the delete request is running
  *   error     - error text to show (empty when fine)
  *   onCancel  - user changed their mind
  *   onConfirm - user confirmed
  */
 export default function ConfirmDeleteDialog({
-  job,
+  title,
+  children,
+  note,
   busy,
   error,
   onCancel,
@@ -60,18 +64,12 @@ export default function ConfirmDeleteDialog({
         aria-describedby={textId}
         onKeyDown={onKeyDown}
       >
-        <h2 id={titleId}>Delete this job?</h2>
+        <h2 id={titleId}>{title}</h2>
 
         <p id={textId} className="delete-summary">
-          <span className="saved-ref">{job.reference_name}</span>
-          <br />
-          {isoToDisplay(job.date)} · Quantity{" "}
-          {job.quantity.toLocaleString("en-US")} · {job.machine}
+          {children}
         </p>
-        <p className="edit-hint">
-          This removes it from the Job plans table and the Excel download. The
-          deletion is recorded in the log.
-        </p>
+        {note && <p className="edit-hint">{note}</p>}
 
         {error && <div className="error">{error}</div>}
 

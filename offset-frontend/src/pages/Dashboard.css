@@ -1,9 +1,15 @@
+/* =====================================================================
+   SHARED LAYOUT (src/pages/Dashboard.css)
+   Used by every tab: the page frame, header, tabs, tables and popups.
+   ===================================================================== */
+
 .dash {
   max-width: 1400px;
   margin: 0 auto;
   padding: 24px 32px;
 }
 
+/* ---------- Header bar ---------- */
 .dash header {
   display: flex;
   justify-content: space-between;
@@ -19,20 +25,87 @@
   font-size: 24px;
   color: var(--gold);
 }
-.dash header span {
-  margin-right: 12px;
+
+/* Username + the three-line menu button, on the right of the header.
+   position: relative lets the dropdown sit right under the button. */
+.menu-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dash header .who {
   color: var(--gold-tint);
   font-size: 14px;
 }
-.dash header button.secondary {
-  border-color: var(--gold);
+
+/* The three-line (hamburger) button. The lines are one 2px bar plus two
+   shadows above and below it, so no image is needed. */
+.dash header .menu-btn {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--gold);
+  border-radius: 8px;
   color: var(--gold);
 }
-.dash header button.secondary:hover:not(:disabled) {
+.dash header .menu-btn:hover:not(:disabled),
+.dash header .menu-btn[aria-expanded="true"] {
   background: rgba(212, 167, 44, 0.15);
 }
+.dash header .menu-btn .bars {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 1px;
+  box-shadow:
+    0 -6px 0 currentColor,
+    0 6px 0 currentColor;
+}
 
-/* Tabs bar */
+/* The dropdown that opens under the button. */
+.menu {
+  position: absolute;
+  z-index: 30; /* above the cards below it */
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 220px;
+  padding: 6px 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(43, 33, 18, 0.18);
+}
+.menu-user {
+  padding: 8px 14px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+/* Menu items look like plain rows, not gold buttons. */
+.menu button,
+.menu button:hover:not(:disabled) {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--umber);
+  font-weight: 500;
+  text-align: left;
+}
+.menu button:hover:not(:disabled) {
+  background: var(--gold-tint);
+}
+
+/* ---------- Tabs bar ---------- */
 .tabs {
   display: flex;
   gap: 4px;
@@ -69,6 +142,7 @@
   min-width: 220px;
 }
 
+/* ---------- Tables ---------- */
 table {
   width: 100%;
   border-collapse: collapse;
@@ -92,12 +166,15 @@ th {
 tbody tr:hover td {
   background: var(--gold-wash);
 }
-td:nth-child(2) {
+/* Main sheet table only (add className="main-table" to it): UPs is the key
+   number, so it is bold. These rules used to apply to EVERY table by
+   accident, which is why the Job plans page had to undo them. */
+.main-table td:nth-child(2) {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-} /* UPs: the key number */
-td:nth-child(3),
-td:nth-child(4) {
+}
+.main-table td:nth-child(3),
+.main-table td:nth-child(4) {
   font-variant-numeric: tabular-nums;
 }
 .empty {
@@ -115,9 +192,27 @@ td:nth-child(4) {
   font-size: 14px;
 }
 
+/* ---------- Messages ---------- */
+/* Green-gold "saved" message. */
+.flash {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: var(--gold-tint);
+  border-left: 3px solid var(--gold-deep);
+  border-radius: 4px;
+  font-size: 14px;
+}
+.edit-hint {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ---------- Popups (used by every tab) ---------- */
 .modal-backdrop {
   position: fixed;
   inset: 0;
+  z-index: 40;
   background: rgba(43, 33, 18, 0.55);
   display: grid;
   place-items: center;
@@ -153,6 +248,9 @@ td:nth-child(4) {
   grid-template-columns: 1fr 1fr 1fr;
   gap: 10px;
 }
+.row.two {
+  grid-template-columns: 1fr 1fr;
+}
 .actions {
   display: flex;
   justify-content: flex-end;
@@ -175,11 +273,48 @@ td:nth-child(4) {
   padding: 2px 0;
 }
 
+/* Small confirmation popups (batch complete, delete job). */
+.saved-dialog {
+  width: min(420px, 100%);
+}
+.saved-ref {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Account settings popup ---------- */
+.modal.settings {
+  width: min(520px, 100%);
+}
+/* Each form inside the popup stacks its fields like the other popups. */
+.settings form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.settings h3 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+/* A divider line above the second form. */
+.settings .settings-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.settings .settings-close {
+  margin-top: 8px;
+}
+
 @media (max-width: 700px) {
   .dash {
     padding: 12px;
   }
-  .row {
+  .dash header .who {
+    display: none; /* the name is also inside the menu */
+  }
+  .row,
+  .row.two {
     grid-template-columns: 1fr;
   }
 }

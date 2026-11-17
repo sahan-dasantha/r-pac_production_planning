@@ -22,8 +22,18 @@ export function AuthProvider({ children }) {
     setUser(null);
   }
 
+  // NEW: called after the planner edits their profile, so the header shows
+  // the new username without logging in again.
+  function updateUser(changes) {
+    setUser((current) => {
+      const next = { ...current, ...changes };
+      localStorage.setItem("user", JSON.stringify(next));
+      return next;
+    });
+  }
+
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

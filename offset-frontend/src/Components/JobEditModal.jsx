@@ -1,36 +1,36 @@
 import { useEffect, useRef, useState } from "react";
 import { getMachines } from "../api/references";
 import { updateJob } from "../api/jobs";
-import { calculate, MAX_DB_INT } from "../utils/calc";
-import { formatDateInput, isoToDisplay, parseDateInput } from "../utils/dates";
+import { calculate, isValidUps, MAX_DB_INT } from "../utils/calc";
 import { errorMessage } from "../utils/errors";
 
 const fmt = (n) => n.toLocaleString("en-US");
 
 /**
- * Popup for editing ONE saved job.
+ * Popup for editing ONE saved job plan. Only the machine and the UPs can be
+ * changed: the quantity and reference come from the uploaded order.
+ *
  * Props:
  *   job     - the job being edited (from the table)
  *   onClose - user cancelled
- *   onSaved - the backend accepted the change
+ *   onSaved - the backend accepted the change (receives the updated job)
  */
 export default function JobEditModal({ job, onClose, onSaved }) {
   // The form starts with the job's current values.
-  const [dateText, setDateText] = useState(isoToDisplay(job.date));
-  const [quantityText, setQuantityText] = useState(String(job.quantity));
   const [machine, setMachine] = useState(job.machine);
+  const [upsText, setUpsText] = useState(String(job.ups));
   const [machines, setMachines] = useState([]);
   const [attempted, setAttempted] = useState(false); // has Save been clicked?
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const dateRef = useRef(null);
+  const machineRef = useRef(null);
 
-  // Load the machine list, and put the cursor in the date field.
+  // Load the machine list, and put the cursor in the machine field.
   useEffect(() => {
     getMachines()
       .then(setMachines)
       .catch(() => {});
-    dateRef.current?.focus();
+    machineRef.current?.focus();
   }, []);
 
   // Escape closes the popup (unless a save is running).
@@ -43,19 +43,17 @@ export default function JobEditModal({ job, onClose, onSaved }) {
   }, [saving, onClose]);
 
   // ---------- Values worked out from the form ----------
-  const quantity = quantityText ? parseInt(quantityText, 10) : 0;
-  const dateISO = parseDateInput(dateText);
-
-  // Live preview, using the job's OWN saved ups, colours and sides.
-  const result =
-    quantity >= 1 ? calculate(quantity, job.ups, job.sides, job.colours) : null;
+  const ups = upsText ? parseInt(upsText, 10) : NaN;
+  // Live preview, using the job's OWN saved quantity, colours and sides.
+  const result = calculate(job.quantity, ups, job.sides, job.colours);
   const tooLarge = result !== null && result.totalClicks > MAX_DB_INT;
 
   const problems = {};
-  if (!dateISO) problems.date = "Enter a valid date as DD/MM/YYYY";
-  if (quantity < 1) problems.quantity = "Enter a quantity of 1 or more";
-  else if (tooLarge) problems.quantity = "This quantity is too large";
   if (!machine) problems.machine = "Select a machine";
+  if (!isValidUps(ups))
+    problems.ups = "UPs must be a whole number from 1 to 100,000";
+  else if (tooLarge)
+    problems.ups = "UPs is too low: total clicks would be too large";
   const show = (f) => (attempted ? problems[f] : undefined);
 
   // ---------- Save ----------
@@ -67,22 +65,14 @@ export default function JobEditModal({ job, onClose, onSaved }) {
     if (Object.keys(problems).length > 0) return;
 
     // Nothing changed -> just close, no request needed.
-    if (
-      dateISO === job.date &&
-      quantity === job.quantity &&
-      machine === job.machine
-    ) {
+    if (machine === job.machine && ups === job.ups) {
       onClose();
       return;
     }
 
     setSaving(true);
     try {
-      const updated = await updateJob(job.id, {
-        date: dateISO,
-        quantity,
-        machine,
-      });
+      const updated = await updateJob(job.id, { machine, ups });
       onSaved(updated);
     } catch (err) {
       setError(errorMessage(err, "Could not save the changes"));
@@ -98,24 +88,27 @@ export default function JobEditModal({ job, onClose, onSaved }) {
         className="modal"
         role="dialog"
         aria-modal="true"
-        aria-label="Edit job"
+        aria-label="Edit job plan"
         onSubmit={handleSubmit}
         noValidate
       >
-        <h2>Edit job</h2>
+        <h2>Edit job plan</h2>
         {error && <div className="error">{error}</div>}
 
-        {/* Cannot be changed: it decides the ups, colours and sides */}
+        <label>SO number</label>
+        <div className="edit-ro">{job.so_number}</div>
+
         <label>Reference</label>
         <div className="edit-ro">{job.reference_name}</div>
         <p className="edit-hint">
-          To use a different reference, delete this job and add a new one.
+          The quantity and reference come from the uploaded order. To plan a
+          different reference, delete this plan and plan the order again.
         </p>
 
         <div className="row">
           <div>
-            <label>UPs</label>
-            <div className="edit-ro">{fmt(job.ups)}</div>
+            <label>Quantity</label>
+            <div className="edit-ro">{fmt(job.quantity)}</div>
           </div>
           <div>
             <label>Colours</label>
@@ -127,35 +120,10 @@ export default function JobEditModal({ job, onClose, onSaved }) {
           </div>
         </div>
 
-        <label htmlFor="edit-date">Date</label>
-        <input
-          id="edit-date"
-          ref={dateRef}
-          placeholder="DD/MM/YYYY"
-          inputMode="numeric"
-          autoComplete="off"
-          value={dateText}
-          onChange={(e) => setDateText(formatDateInput(e.target.value))}
-        />
-        {show("date") && <div className="field-error">{show("date")}</div>}
-
-        <label htmlFor="edit-quantity">Quantity</label>
-        <input
-          id="edit-quantity"
-          inputMode="numeric"
-          autoComplete="off"
-          value={quantityText}
-          onChange={(e) =>
-            setQuantityText(e.target.value.replace(/\D/g, "").slice(0, 9))
-          }
-        />
-        {show("quantity") && (
-          <div className="field-error">{show("quantity")}</div>
-        )}
-
         <label htmlFor="edit-machine">Machine</label>
         <select
           id="edit-machine"
+          ref={machineRef}
           value={machine}
           onChange={(e) => setMachine(e.target.value)}
         >
@@ -170,7 +138,19 @@ export default function JobEditModal({ job, onClose, onSaved }) {
           <div className="field-error">{show("machine")}</div>
         )}
 
-        {/* The three calculated values, updating as the quantity changes */}
+        <label htmlFor="edit-ups">Number of UPs</label>
+        <input
+          id="edit-ups"
+          inputMode="numeric"
+          autoComplete="off"
+          value={upsText}
+          onChange={(e) =>
+            setUpsText(e.target.value.replace(/\D/g, "").slice(0, 6))
+          }
+        />
+        {show("ups") && <div className="field-error">{show("ups")}</div>}
+
+        {/* The three calculated values, updating as the UPs change */}
         <div className="edit-preview">
           <div>
             Impressions{" "}

@@ -4,7 +4,7 @@ import Home from "./pages/Home";
 import JobPlans from "./pages/JobPlans";
 import MainSheet from "./pages/MainSheet";
 import AppLayout from "./Components/AppLayout";
-import ProtectedRoute from "./components/ProtectedRoute";
+import ProtectedRoute from "./Components/ProtectedRoute"; // capital C, matches the folder name
 
 export default function App() {
   return (

@@ -17,6 +17,12 @@
   font-size: 14px;
 }
 
+/* ---------- Batch picker + search (uses .toolbar from Dashboard.css) ---------- */
+.toolbar select {
+  min-width: 240px;
+  max-width: 100%;
+}
+
 /* ---------- Empty state ---------- */
 .empty-jobs {
   padding: 32px;
@@ -60,12 +66,6 @@
   font-weight: 600;
 }
 
-/* The Main sheet table makes column 2 bold (its UPs column).
-   Here column 2 is the Reference, so we undo that. */
-.jobs-table td:nth-child(2) {
-  font-weight: 400;
-}
-
 /* ---------- Row buttons ---------- */
 .row-actions {
   white-space: nowrap;
@@ -80,16 +80,6 @@ button.danger-text {
   color: var(--danger);
 }
 
-/* ---------- "Job updated / deleted" message ---------- */
-.flash {
-  margin-bottom: 16px;
-  padding: 10px 12px;
-  background: var(--gold-tint);
-  border-left: 3px solid var(--gold-deep);
-  border-radius: 4px;
-  font-size: 14px;
-}
-
 /* ---------- Edit and delete popups ---------- */
 .edit-ro {
   padding: 10px 12px;
@@ -98,11 +88,6 @@ button.danger-text {
   border-radius: 6px;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
-}
-.edit-hint {
-  margin: 2px 0 0;
-  color: var(--muted);
-  font-size: 12px;
 }
 .edit-preview {
   margin-top: 12px;
@@ -124,4 +109,5 @@ button.danger-text {
   border-left: 3px solid var(--gold);
   border-radius: 4px;
   font-size: 14px;
+  overflow-wrap: anywhere;
 }
