@@ -167,12 +167,17 @@ export default function Home() {
   }
 
   // ---------- Buttons ----------
-  async function handleNext({ machine, ups }) {
+  async function handleNext({ machine, ups, colours, sides }) {
     if (busy || !selected) return;
     setBusy(true);
     setActionError("");
     try {
-      const updated = await planOrder(selected.id, { machine, ups });
+      const updated = await planOrder(selected.id, {
+        machine,
+        ups,
+        colours,
+        sides,
+      });
       advance(replace(updated), updated.id);
     } catch (err) {
       setActionError(errorMessage(err, "Could not save the plan"));

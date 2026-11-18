@@ -146,10 +146,12 @@ class Job(models.Model):
         if self._state.adding:
             self.reference_name = self.reference.name
             self.quantity = self.sales_order.quantity
+        if not self.ups:
+            self.ups = self.reference.ups
+        if not self.colours:
             self.colours = self.reference.colours
+        if not self.sides:
             self.sides = self.reference.sides
-            if not self.ups:                      # planner didn't edit UPs
-                self.ups = self.reference.ups     # <- your old code always overwrote this
         self.calculate()
         super().save(*args, **kwargs)
 
