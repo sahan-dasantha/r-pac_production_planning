@@ -67,16 +67,14 @@ export default function OrderDetails({
   const [machine, setMachine] = useState(
     order.job?.machine ?? ref?.default_machine ?? "",
   );
-  const [upsText, setUpsText] = useState(
-    String(order.job?.ups ?? ref?.ups ?? ""),
-  );
+  
   const [attempted, setAttempted] = useState(false); // has Next been clicked?
 
   // ---------- Values worked out from the form ----------
-  const ups = upsText ? parseInt(upsText, 10) : NaN;
+  const ups = order.job?.ups ?? ref?.ups ?? NaN;
   const result = ref
     ? calculate(order.quantity, ups, ref.sides, ref.colours)
-    : null;
+    : null;  
   const tooLarge = result !== null && result.totalClicks > MAX_DB_INT;
 
   const problems = {};
@@ -88,8 +86,7 @@ export default function OrderDetails({
   // Machine errors wait for the first Next click; UPs errors show as soon as
   // something has been typed (or cleared).
   const showMachine = attempted ? problems.machine : undefined;
-  const showUps =
-    attempted || upsText !== String(ref?.ups ?? "") ? problems.ups : undefined;
+
 
   // ---------- The status line next to the buttons ----------
   let statusText;
@@ -180,34 +177,6 @@ export default function OrderDetails({
           )}
           {showMachine && <div className="field-error">{showMachine}</div>}
         </div>
-
-        <div>
-          <label htmlFor="plan-ups">Number of UPs</label>
-          <input
-            id="plan-ups"
-            inputMode="numeric"
-            autoComplete="off"
-            value={upsText}
-            disabled={!ref}
-            // keep digits only, max 6 characters
-            onChange={(e) =>
-              setUpsText(e.target.value.replace(/\D/g, "").slice(0, 6))
-            }
-          />
-          {ref && ups !== ref.ups && (
-            <div className="hint">
-              Main sheet value: {fmt(ref.ups)}{" "}
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() => setUpsText(String(ref.ups))}
-              >
-                Use it
-              </button>
-            </div>
-          )}
-          {showUps && <div className="field-error">{showUps}</div>}
-        </div>
       </div>
 
       {/* ----- Breakdown: updates as the UPs change ----- */}
@@ -253,6 +222,9 @@ export default function OrderDetails({
         </div>
       </section>
 
+      {problems.ups && <div className="field-error">{problems.ups}</div>}
+
+      
       {error && (
         <div className="error detail-error" role="alert">
           {error}

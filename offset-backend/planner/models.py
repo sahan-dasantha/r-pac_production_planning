@@ -3,7 +3,7 @@ from django.core.validators import MinValueValidator
 from django.db import models
 
 MACHINES = [
-    "7 - K", "RANPATH", "SM - B", "SM - C",
+    "7 - K", "RANPATH", "SM - A", "SM - B", "SM - C",
     "FROM BULK", "SCREEN", "PRINT CARE", "GUILLOTINE",
 ]
 MACHINE_CHOICES = [(m, m) for m in MACHINES]
@@ -21,7 +21,7 @@ def compute(quantity, ups, sides, colours):
 
     Returns (impressions, total_impressions, total_clicks) as whole numbers.
     """
-    impressions = (quantity + ups - 1) // ups
+    impressions = (2 * quantity + ups) // (2 * ups)
     total_impressions = impressions * sides
     total_clicks = total_impressions * colours
     return impressions, total_impressions, total_clicks

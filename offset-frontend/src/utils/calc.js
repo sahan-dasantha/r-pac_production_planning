@@ -34,8 +34,8 @@ export function calculate(quantity, ups, sides, colours) {
     return null;
   }
 
-  // (q + u - 1) / u rounded down is the same as ROUNDUP(q / u)
-  const impressions = Math.floor((q + u - 1) / u);
+  // Same as Python: round to nearest, .5 rounds up
+  const impressions = Math.floor((2 * q + u) / (2 * u));   // 23000 / 24 -> 958
   const totalImpressions = impressions * s;
   const totalClicks = totalImpressions * c;
   return { impressions, totalImpressions, totalClicks };
