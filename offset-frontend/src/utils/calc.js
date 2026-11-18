@@ -14,4 +14,29 @@ export const changePassword = (current_password, new_password) =>
 
 export const MAX_DB_INT = 2147483647;
 export const isValidUps = (v) => Number.isFinite(Number(v));
-export const calculate = () => ({}); // placeholder, replace with the real logic
+
+export function calculate(quantity, ups, sides, colours) {
+  // Convert first, so numbers that arrive as text ("23000") still work.
+  const q = Number(quantity);
+  const u = Number(ups);
+  const s = Number(sides);
+  const c = Number(colours);
+
+  if (
+    !Number.isInteger(q) ||
+    q < 1 ||
+    !isValidUps(u) ||
+    !Number.isInteger(s) ||
+    !Number.isInteger(c)
+  ) {
+    // TEMPORARY: shows in the browser Console which value was refused.
+    console.log("calculate refused:", { quantity, ups, sides, colours });
+    return null;
+  }
+
+  // (q + u - 1) / u rounded down is the same as ROUNDUP(q / u)
+  const impressions = Math.floor((q + u - 1) / u);
+  const totalImpressions = impressions * s;
+  const totalClicks = totalImpressions * c;
+  return { impressions, totalImpressions, totalClicks };
+} // placeholder, replace with the real logic
