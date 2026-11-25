@@ -1,36 +1,84 @@
-import { useEffect, useRef, useState } from "react";
-import { getMachines } from "../api/references";
+import { useEffect, useState } from "react";
 import { updateJob } from "../api/jobs";
-import { calculate, isValidUps, MAX_DB_INT } from "../utils/calc";
-import { errorMessage } from "../utils/errors";
-
-const fmt = (n) => n.toLocaleString("en-US");
+import { getMachines } from "../api/references";
 
 /**
- * Popup for editing ONE saved job plan. Only the machine and the UPs can be
- * changed: the quantity and reference come from the uploaded order.
+ * Edit ALL the details of one job plan.
  *
  * Props:
- *   job     - the job being edited (from the table)
- *   onClose - user cancelled
- *   onSaved - the backend accepted the change (receives the updated job)
+ *   job      - the row from the Job plans table
+ *   onClose  - user cancelled
+ *   onSaved  - called with the saved job
  */
-export default function JobEditModal({ job, onClose, onSaved }) {
-  // The form starts with the job's current values.
-  const [machine, setMachine] = useState(job.machine);
-  const [upsText, setUpsText] = useState(String(job.ups));
-  const [machines, setMachines] = useState([]);
-  const [attempted, setAttempted] = useState(false); // has Save been clicked?
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const machineRef = useRef(null);
 
-  // Load the machine list, and put the cursor in the machine field.
+// One label + input + error message. (Outside the modal so typing never loses focus.)
+function Field({ label, error, hint, children }) {
+  return (
+    <div>
+      <label>{label}</label>
+      {children}
+      {hint && !error && (
+        <div style={{ fontSize: 12, opacity: 0.7 }}>{hint}</div>
+      )}
+      {error && <div className="field-error">{[].concat(error).join(" ")}</div>}
+    </div>
+  );
+}
+
+const grid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+  gap: 12,
+};
+
+// The same maths as the server: impressions = quantity / UPs (rounded),
+// total impressions = impressions x sides, total clicks = that x colours.
+function calculate(f) {
+  const q = Number(f.quantity);
+  const u = Number(f.ups);
+  const s = Number(f.sides);
+  const c = Number(f.colours);
+  if (!(q >= 1 && u >= 1 && s >= 1 && c >= 1)) return null;
+  const impressions = Math.floor((2 * q + u) / (2 * u));
+  const totalImpressions = impressions * s;
+  return {
+    impressions,
+    totalImpressions,
+    totalClicks: totalImpressions * c,
+    balance: f.fg === "" || f.fg === null ? "" : q - Number(f.fg),
+  };
+}
+
+const fmt = (n) =>
+  n === "" || n === null ? "" : Number(n).toLocaleString("en-US");
+
+export default function JobEditModal({ job, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    current_stage: job.current_stage ?? "",
+    docket_stage: job.docket_stage ?? "",
+    so_number: job.so_number ?? "",
+    order_type: job.order_type ?? "",
+    quantity: job.quantity ?? "",
+    fg: job.fg ?? "",
+    noc: job.noc ?? 0,
+    reference_name: job.reference_name ?? "",
+    customer: job.customer ?? "",
+    order_place_date: job.order_place_date ?? "",
+    value: job.value ?? "",
+    ups: job.ups ?? "",
+    colours: job.colours ?? "",
+    sides: job.sides ?? "",
+    machine: job.machine ?? "",
+    hold_status: job.hold_status ?? "",
+  });
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [machines, setMachines] = useState([]);
+
   useEffect(() => {
     getMachines()
       .then(setMachines)
       .catch(() => {});
-    machineRef.current?.focus();
   }, []);
 
   // Escape closes the popup (unless a save is running).
@@ -42,128 +90,160 @@ export default function JobEditModal({ job, onClose, onSaved }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [saving, onClose]);
 
-  // ---------- Values worked out from the form ----------
-  const ups = upsText ? parseInt(upsText, 10) : NaN;
-  // Live preview, using the job's OWN saved quantity, colours and sides.
-  const result = calculate(job.quantity, ups, job.sides, job.colours);
-  const tooLarge = result !== null && result.totalClicks > MAX_DB_INT;
+  const set = (field) => (e) =>
+    setForm((f) => ({ ...f, [field]: e.target.value }));
 
-  const problems = {};
-  if (!machine) problems.machine = "Select a machine";
-  if (!isValidUps(ups))
-    problems.ups = "UPs must be a whole number from 1 to 100,000";
-  else if (tooLarge)
-    problems.ups = "UPs is too low: total clicks would be too large";
-  const show = (f) => (attempted ? problems[f] : undefined);
+  // A text/number input bound to one field, with its error message.
+  const input = (name, label, props = {}, hint) => (
+    <Field label={label} error={errors[name]} hint={hint}>
+      <input value={form[name]} onChange={set(name)} {...props} />
+    </Field>
+  );
 
-  // ---------- Save ----------
+  const calc = calculate(form);
+  // The machine list; keeps the job's current machine even if it is not in the list.
+  const machineOptions = machines.includes(form.machine)
+    ? machines
+    : [form.machine, ...machines].filter(Boolean);
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (saving) return;
-    setAttempted(true);
-    setError("");
-    if (Object.keys(problems).length > 0) return;
-
-    // Nothing changed -> just close, no request needed.
-    if (machine === job.machine && ups === job.ups) {
-      onClose();
-      return;
-    }
-
     setSaving(true);
+    setErrors({});
+    const payload = {
+      current_stage: form.current_stage,
+      docket_stage: form.docket_stage,
+      so_number: form.so_number,
+      order_type: form.order_type,
+      quantity: Number(form.quantity),
+      fg: form.fg === "" ? null : Number(form.fg),
+      noc: form.noc === "" ? 0 : Number(form.noc),
+      reference_name: form.reference_name,
+      customer: form.customer,
+      order_place_date: form.order_place_date || null,
+      value: form.value === "" ? 0 : Number(form.value),
+      ups: Number(form.ups),
+      colours: Number(form.colours),
+      sides: Number(form.sides),
+      machine: form.machine,
+      hold_status: form.hold_status,
+    };
     try {
-      const updated = await updateJob(job.id, { machine, ups });
-      onSaved(updated);
+      const saved = await updateJob(job.id, payload);
+      onSaved(saved);
     } catch (err) {
-      setError(errorMessage(err, "Could not save the changes"));
+      setErrors(err.response?.data ?? { detail: "Could not save" });
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    // The backdrop has no onClick, so a stray click cannot throw away edits.
+    // No click handler on the backdrop: a stray click must not throw away typing.
     <div className="modal-backdrop">
       <form
         className="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Edit job plan"
         onSubmit={handleSubmit}
-        noValidate
+        style={{
+          width: "min(900px, 95vw)",
+          maxHeight: "92vh",
+          overflowY: "auto",
+        }}
       >
         <h2>Edit job plan</h2>
-        {error && <div className="error">{error}</div>}
-
-        <label>SO number</label>
-        <div className="edit-ro">{job.so_number}</div>
-
-        <label>Reference</label>
-        <div className="edit-ro">{job.reference_name}</div>
         <p className="edit-hint">
-          The quantity and reference come from the uploaded order. To plan a
-          different reference, delete this plan and plan the order again.
+          Order details are shared: a change to them is seen in every sheet that
+          contains this order. Calculated values update by themselves.
         </p>
-
-        <div className="row">
-          <div>
-            <label>Quantity</label>
-            <div className="edit-ro">{fmt(job.quantity)}</div>
+        {errors.detail && <div className="error">{errors.detail}</div>}
+        {errors.non_field_errors && (
+          <div className="error">
+            {[].concat(errors.non_field_errors).join(" ")}
           </div>
-          <div>
-            <label>Colours</label>
-            <div className="edit-ro">{fmt(job.colours)}</div>
-          </div>
-          <div>
-            <label>Sides</label>
-            <div className="edit-ro">{fmt(job.sides)}</div>
-          </div>
-        </div>
-
-        <label htmlFor="edit-machine">Machine</label>
-        <select
-          id="edit-machine"
-          ref={machineRef}
-          value={machine}
-          onChange={(e) => setMachine(e.target.value)}
-        >
-          <option value="">Select machine</option>
-          {machines.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
-        {show("machine") && (
-          <div className="field-error">{show("machine")}</div>
         )}
 
-        <label htmlFor="edit-ups">Number of UPs</label>
-        <input
-          id="edit-ups"
-          inputMode="numeric"
-          autoComplete="off"
-          value={upsText}
-          onChange={(e) =>
-            setUpsText(e.target.value.replace(/\D/g, "").slice(0, 6))
-          }
-        />
-        {show("ups") && <div className="field-error">{show("ups")}</div>}
+        <h3>Order</h3>
+        <div style={grid}>
+          {input("so_number", "SO Number", { required: true, autoFocus: true })}
+          {input("order_type", "Order Type", { required: true })}
+          {input("customer", "Customer", { required: true })}
+          {input("order_place_date", "Order Place", { type: "date" })}
+          {input("current_stage", "Current Stage")}
+          {input("docket_stage", "Docket Stage")}
+          <Field label="Hold/Unhold" error={errors.hold_status}>
+            <input
+              list="hold-options"
+              value={form.hold_status}
+              onChange={set("hold_status")}
+            />
+            <datalist id="hold-options">
+              <option value="Hold" />
+              <option value="Unhold" />
+            </datalist>
+          </Field>
+          {input("noc", "NOC", { type: "number", min: "0" })}
+          {input("value", "Value", { type: "number", min: "0", step: "0.01" })}
+        </div>
 
-        {/* The three calculated values, updating as the UPs change */}
-        <div className="edit-preview">
-          <div>
-            Impressions{" "}
-            <strong>{result ? fmt(result.impressions) : "-"}</strong>
-          </div>
-          <div>
-            Total impressions{" "}
-            <strong>{result ? fmt(result.totalImpressions) : "-"}</strong>
-          </div>
-          <div>
-            Total clicks{" "}
-            <strong>{result ? fmt(result.totalClicks) : "-"}</strong>
-          </div>
+        <h3>Plan</h3>
+        <div style={grid}>
+          {input(
+            "reference_name",
+            "References",
+            { required: true },
+            "Must already exist in the Main sheet.",
+          )}
+          <Field label="Machine" error={errors.machine}>
+            <select value={form.machine} onChange={set("machine")} required>
+              <option value="">Select machine</option>
+              {machineOptions.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {input("quantity", "Quantity", {
+            type: "number",
+            min: "1",
+            required: true,
+          })}
+          {input("fg", "FG", { type: "number", min: "0" })}
+          {input("ups", "UP Plan", {
+            type: "number",
+            min: "1",
+            required: true,
+          })}
+          {input("colours", "No of Colours", {
+            type: "number",
+            min: "1",
+            required: true,
+          })}
+          {input("sides", "No of Sides", {
+            type: "number",
+            min: "1",
+            required: true,
+          })}
+        </div>
+
+        <h3>Calculated (updates by itself)</h3>
+        <div style={grid}>
+          <Field label="Balance">
+            <input readOnly value={calc ? fmt(calc.balance) : ""} />
+          </Field>
+          <Field label="Impression">
+            <input readOnly value={calc ? fmt(calc.impressions) : ""} />
+          </Field>
+          <Field label="Total Impression">
+            <input readOnly value={calc ? fmt(calc.totalImpressions) : ""} />
+          </Field>
+          <Field label="Total Clicks">
+            <input readOnly value={calc ? fmt(calc.totalClicks) : ""} />
+          </Field>
+          <Field label="Last updated">
+            <input readOnly value={new Date(job.updated_at).toLocaleString()} />
+          </Field>
         </div>
 
         <div className="actions">
@@ -176,7 +256,7 @@ export default function JobEditModal({ job, onClose, onSaved }) {
             Cancel
           </button>
           <button type="submit" disabled={saving}>
-            {saving ? "Saving..." : "Save changes"}
+            {saving ? "Saving..." : "Save"}
           </button>
         </div>
       </form>

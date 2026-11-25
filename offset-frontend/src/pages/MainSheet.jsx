@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { searchReferences } from "../api/references";
+import { searchReferences, deleteReference } from "../api/references";
 import ReferenceModal from "../components/ReferenceModal";
 
 export default function MainSheet() {
@@ -14,6 +14,7 @@ export default function MainSheet() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(null); // null = closed, {} = new
+  const [deletingId, setDeletingId] = useState(null); // id of row being deleted
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
@@ -37,6 +38,30 @@ export default function MainSheet() {
       clearTimeout(timer);
     };
   }, [query, page, reload]);
+
+  async function handleDelete(r) {
+    const ok = window.confirm(
+      `Delete reference "${r.name}"? This cannot be undone.`,
+    );
+    if (!ok) return;
+
+    setDeletingId(r.id);
+    try {
+      await deleteReference(r.id);
+      setError("");
+
+      // If that was the last row on this page, go back one page
+      if (data.results.length === 1 && page > 1) {
+        setPage(page - 1);
+      } else {
+        setReload((n) => n + 1);
+      }
+    } catch {
+      setError("Could not delete reference");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
     <>
@@ -80,6 +105,13 @@ export default function MainSheet() {
               <td>
                 <button className="secondary" onClick={() => setEditing(r)}>
                   Edit
+                </button>{" "}
+                <button
+                  className="secondary danger"
+                  onClick={() => handleDelete(r)}
+                  disabled={deletingId === r.id}
+                >
+                  {deletingId === r.id ? "Deleting..." : "Delete"}
                 </button>
               </td>
             </tr>

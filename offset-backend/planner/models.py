@@ -81,7 +81,12 @@ class SalesOrder(models.Model):
 
     # Re-uploading the same SO overwrites this row (update_or_create on so_number).
     so_number = models.CharField(max_length=50, unique=True)
-    batch = models.ForeignKey(UploadBatch, on_delete=models.CASCADE, related_name="orders")
+    # The NEWEST sheet that contains this order, and its row number there.
+    # Which sheets contain the order is kept in BatchOrder (below).
+    # SET_NULL: deleting a sheet must never delete an order that has a saved plan.
+    batch = models.ForeignKey(
+        UploadBatch, null=True, blank=True, on_delete=models.SET_NULL, related_name="orders",
+    )
     position = models.PositiveIntegerField()  # 1, 2, 3 ... order in the sheet
 
     reference_name = models.CharField(max_length=255)  # text, because it may not exist yet
@@ -91,6 +96,13 @@ class SalesOrder(models.Model):
     order_place_date = models.DateField(null=True, blank=True)
     quantity = models.PositiveIntegerField()
     value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    # NEW, optional columns of the uploaded sheet (shown on the Job plans tab).
+    # Empty when the sheet does not have that column.
+    current_stage = models.CharField(max_length=100, blank=True, default="")
+    docket_stage = models.CharField(max_length=100, blank=True, default="")
+    hold_status = models.CharField(max_length=100, blank=True, default="")  # e.g. "Hold" / "Unhold"
+    fg = models.PositiveIntegerField(null=True, blank=True)  # finished goods; null = unknown
 
     status = models.CharField(max_length=10, choices=STATUSES, default=PENDING, db_index=True)
 
@@ -104,6 +116,23 @@ class SalesOrder(models.Model):
 
     def __str__(self):
         return self.so_number
+
+
+# ---------------------------------------------------------------------------
+# NEW: which orders are in which sheet. One order can be in SEVERAL sheets
+# (for example sheet 1-100, sheet 101-200 and the full sheet 1-200), so
+# uploading a bigger sheet never empties the earlier ones.
+# ---------------------------------------------------------------------------
+class BatchOrder(models.Model):
+    batch = models.ForeignKey(UploadBatch, on_delete=models.CASCADE, related_name="entries")
+    order = models.ForeignKey(SalesOrder, on_delete=models.CASCADE, related_name="entries")
+    position = models.PositiveIntegerField()  # row number of the order in THIS sheet
+
+    class Meta:
+        ordering = ["batch", "position"]
+        constraints = [
+            models.UniqueConstraint(fields=["batch", "order"], name="unique_order_per_batch"),
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +192,7 @@ class Job(models.Model):
 # Audit trail (KEPT from your version)
 # ---------------------------------------------------------------------------
 class JobLog(models.Model):
-    ACTIONS = [("edited", "Edited"), ("deleted", "Deleted")]
+    ACTIONS = [("edited", "Edited"), ("deleted", "Deleted"), ("restored", "Restored")]
 
     job_id = models.PositiveIntegerField()  # plain number so the log survives deletion
     reference_name = models.CharField(max_length=255)

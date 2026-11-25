@@ -3,7 +3,6 @@ import {
   createReference,
   updateReference,
   getHistory,
-  getMachines,
 } from "../api/references";
 
 /**
@@ -29,18 +28,10 @@ export default function ReferenceModal({
     ups: reference.ups ?? "",
     colours: reference.colours ?? "",
     sides: reference.sides ?? "",
-    default_machine: reference.default_machine ?? "",
   });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState([]);
-  const [machines, setMachines] = useState([]);
-
-  useEffect(() => {
-    getMachines()
-      .then(setMachines)
-      .catch(() => {});
-  }, []);
 
   useEffect(() => {
     if (isEdit)
@@ -148,17 +139,6 @@ export default function ReferenceModal({
             {fieldError("sides")}
           </div>
         </div>
-
-        <label>Machine</label>
-        <select value={form.default_machine} onChange={set("default_machine")}>
-          <option value="">Select machine</option>
-          {machines.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
-        {fieldError("default_machine")}
 
         {isEdit && history.length > 0 && (
           <div className="history">

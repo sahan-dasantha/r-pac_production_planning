@@ -15,6 +15,10 @@ export const uploadBatch = (file) => {
 // { id, filename, uploaded_at, uploaded_by, total, planned, skipped, pending }
 export const listBatches = () => api.get("/batches/").then((r) => r.data);
 
+// DELETE /api/batches/<id>/ -> remove one uploaded sheet (batch).
+// Its orders (and their plans) are removed with it. Returns nothing (204).
+export const deleteBatch = (id) => api.delete(`/batches/${id}/`);
+
 // GET /api/batches/<id>/orders/ -> EVERY order of the batch in one list.
 // Each order carries its Main sheet values (reference, or null if missing)
 // and its saved plan (job, or null).
@@ -53,6 +57,11 @@ export const updateJob = (id, data) =>
 
 // DELETE /api/jobs/<id>/ -> the order goes back to pending
 export const deleteJob = (id) => api.delete(`/jobs/${id}/`);
+
+// POST /api/jobs/restore/ {ids} -> Undo: bring deleted job plans back.
+// Returns { restored: [new job ids], skipped: [{ id, reason }] }.
+export const restoreJobs = (ids) =>
+  api.post("/jobs/restore/", { ids }).then((r) => r.data);
 
 // GET /api/jobs/export/?batch=ID -> the Excel file (all batches without an id).
 // Returns { blob, filename }; the server chooses the file name.

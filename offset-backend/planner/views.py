@@ -1,9 +1,11 @@
 import re
 from datetime import date
 
+from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.models import Count, ProtectedError, Q
+from django.db.models import Count, OuterRef, ProtectedError, Q, Subquery
 from django.http import HttpResponse
+from django.utils.dateparse import parse_datetime
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -16,7 +18,8 @@ from .excel import (
     normalize_name, parse_sales_orders,
 )
 from .models import (
-    MACHINES, Job, JobLog, Reference, ReferenceHistory, SalesOrder, UploadBatch,
+    MACHINES, BatchOrder, Job, JobLog, Reference, ReferenceHistory, SalesOrder,
+    UploadBatch,
 )
 from .serializers import (
     BatchSerializer, ChangePasswordSerializer, JobSerializer, MeSerializer,
@@ -27,12 +30,26 @@ from .serializers import (
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # reject files over 10 MB
 TRACKED = ["ups", "colours", "sides", "default_machine"]
 TRACKED_JOB_FIELDS = ["machine", "ups", "total_clicks"]
+# Optional sheet columns that are stored on the order when the sheet has them.
+OPTIONAL_ORDER_FIELDS = ["current_stage", "docket_stage", "fg", "hold_status"]
 
 
 # ------------------------------------------------------------------ helpers
 def reference_lookup():
     """Every Main Sheet reference, keyed by normalised name (one query)."""
     return {normalize_name(r.name): r for r in Reference.objects.all()}
+
+
+def backfill_entries():
+    """
+    Orders saved before sheets could share orders have no BatchOrder row yet.
+    Create it from the sheet the order was saved in. Safe to call any time.
+    """
+    missing = (SalesOrder.objects.filter(entries__isnull=True, batch__isnull=False)
+               .only("id", "batch_id", "position"))
+    rows = [BatchOrder(batch_id=o.batch_id, order_id=o.id, position=o.position) for o in missing]
+    if rows:
+        BatchOrder.objects.bulk_create(rows, batch_size=500, ignore_conflicts=True)
 
 
 def job_snapshot(job):
@@ -50,6 +67,21 @@ def job_snapshot(job):
         "saved_by": job.created_by.username if job.created_by else None,
         "saved_at": job.created_at.isoformat(),
     }
+
+
+def edit_snapshot(job):
+    """Every value a planner can change on a job plan, as text (for the edit log)."""
+    o = job.sales_order
+    values = {
+        "so_number": o.so_number, "order_type": o.order_type, "customer": o.customer,
+        "order_place_date": o.order_place_date, "noc": o.noc, "value": o.value,
+        "current_stage": o.current_stage, "docket_stage": o.docket_stage,
+         "hold_status": o.hold_status, "fg": o.fg,
+        "reference_name": job.reference_name, "quantity": job.quantity,
+        "machine": job.machine, "ups": job.ups, "colours": job.colours,
+        "sides": job.sides, "total_clicks": job.total_clicks,
+    }
+    return {k: str(x) for k, x in values.items()}
 
 
 def log_job(job, action_name, details, user):
@@ -118,17 +150,22 @@ class ReferenceViewSet(viewsets.ModelViewSet):
 def save_batch(filename, rows, user):
     """
     Store one uploaded sheet as a batch. All or nothing.
-    A SO number that already exists is OVERWRITTEN with the new details and
-    moves into this batch. Its saved plan is kept, unless the quantity or
-    reference changed, in which case the plan is no longer valid: it is
-    deleted (and logged) and the order becomes pending again.
+    A SO number that already exists is UPDATED with the new details and is
+    added to this batch. It also STAYS in the earlier sheets that had it, so
+    uploading a bigger sheet never empties the smaller ones. Its saved plan is
+    kept, unless the quantity or reference changed, in which case the plan is
+    no longer valid: it is deleted (and logged) and the order becomes pending again.
     """
     refs = reference_lookup()
     fields = ["reference_name", "order_type", "customer", "noc",
               "order_place_date", "quantity", "value"]
+    # Only the optional columns that this sheet actually has: a sheet without
+    # them must not wipe the values saved by an earlier upload.
+    fields += [f for f in OPTIONAL_ORDER_FIELDS if rows and f in rows[0]]
     so_numbers = [r["so_number"] for r in rows]
 
     with transaction.atomic():
+        backfill_entries()  # keep the earlier sheets complete before anything changes
         batch = UploadBatch.objects.create(filename=filename, uploaded_by=user)
 
         existing = {}
@@ -161,6 +198,18 @@ def save_batch(filename, rows, user):
         SalesOrder.objects.bulk_create(to_create)
         SalesOrder.objects.bulk_update(to_update, fields + ["batch", "position", "status"])
 
+        # Record which orders are in THIS sheet. Orders that are also in older
+        # sheets stay in those sheets too: nothing is taken away from them.
+        ids = {}
+        for i in range(0, len(so_numbers), 500):
+            chunk = so_numbers[i:i + 500]
+            ids.update(SalesOrder.objects.filter(so_number__in=chunk).values_list("so_number", "id"))
+        BatchOrder.objects.bulk_create(
+            [BatchOrder(batch=batch, order_id=ids[r["so_number"]], position=position)
+             for position, r in enumerate(rows, start=1)],
+            batch_size=500,
+        )
+
     missing = {normalize_name(r["reference_name"]) for r in rows} - set(refs)
     return batch, {
         "created": len(to_create),
@@ -170,21 +219,66 @@ def save_batch(filename, rows, user):
     }
 
 
-class BatchViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+class BatchViewSet(
+    mixins.ListModelMixin,
+    mixins.DestroyModelMixin,  # DELETE /api/batches/<id>/ : remove one uploaded sheet
+    viewsets.GenericViewSet,
+):
     serializer_class = BatchSerializer
     pagination_class = None  # a handful of batches: send them all
 
     def get_queryset(self):
+        backfill_entries()
         return (
             UploadBatch.objects.select_related("uploaded_by")
             .annotate(
-                total=Count("orders"),
-                planned=Count("orders", filter=Q(orders__status=SalesOrder.PLANNED)),
-                skipped=Count("orders", filter=Q(orders__status=SalesOrder.SKIPPED)),
-                pending=Count("orders", filter=Q(orders__status=SalesOrder.PENDING)),
+                # counted from the sheet's own list of orders (BatchOrder)
+                total=Count("entries"),
+                planned=Count("entries", filter=Q(entries__order__status=SalesOrder.PLANNED)),
+                skipped=Count("entries", filter=Q(entries__order__status=SalesOrder.SKIPPED)),
+                pending=Count("entries", filter=Q(entries__order__status=SalesOrder.PENDING)),
             )
-            .filter(total__gt=0)  # a batch whose orders all moved to a newer upload is hidden
+            .filter(total__gt=0)
         )
+
+    def destroy(self, request, *args, **kwargs):
+        batch = self.get_object()
+        try:
+            kept = self.perform_destroy(batch)
+        except ProtectedError:
+            return Response(
+                {"detail": "This sheet is in use and cannot be removed."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response({"kept_plans": kept})
+
+    def perform_destroy(self, instance):
+        """
+        Delete one sheet. Saved job plans are NEVER deleted:
+          - an order that is also in another sheet simply stays in that sheet;
+          - an order with a saved plan that was only in this sheet is kept too
+            (its plan stays in the Job plans tab, under "Plans of deleted sheets");
+          - an order with no plan was only a row of this sheet, so it is deleted.
+        Returns how many saved plans were kept without a sheet. All or nothing.
+        """
+        kept = 0
+        with transaction.atomic():
+            entries = list(instance.entries.select_related("order__job"))
+            instance.entries.all().delete()  # the orders leave this sheet
+            for entry in entries:
+                order = entry.order
+                newest = BatchOrder.objects.filter(order=order).order_by("-batch_id").first()
+                if newest is not None:
+                    if order.batch_id == instance.id:
+                        # still in another sheet: point it at the newest one
+                        order.batch_id, order.position = newest.batch_id, newest.position
+                        order.save(update_fields=["batch", "position"])
+                elif getattr(order, "job", None) is not None:
+                    kept += 1  # keeps its plan; its sheet becomes empty (SET_NULL)
+                else:
+                    order.delete()  # a plain row of this sheet, nothing to keep
+            instance.delete()
+        return kept
 
     @action(detail=False, methods=["post"], parser_classes=[MultiPartParser])
     def upload(self, request):
@@ -213,8 +307,11 @@ class BatchViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     def orders(self, request, pk=None):
         """GET /api/batches/<id>/orders/ -> EVERY order of the batch (not paged)."""
         batch = self.get_object()
-        qs = batch.orders.select_related("job").order_by("position")
-        data = SalesOrderSerializer(qs, many=True, context={"refs": reference_lookup()}).data
+        orders = []
+        for entry in batch.entries.select_related("order__job").order_by("position"):
+            entry.order.position = entry.position  # the row number in THIS sheet
+            orders.append(entry.order)
+        data = SalesOrderSerializer(orders, many=True, context={"refs": reference_lookup()}).data
         return Response(data)
 
 
@@ -308,22 +405,32 @@ class JobViewSet(
     filter_backends = [filters.SearchFilter]
     search_fields = ["sales_order__so_number", "reference_name",
                      "sales_order__customer", "machine"]
-    http_method_names = ["get", "patch", "delete", "head", "options"]  # plans are created by orders/<id>/plan/
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]  # POST only for jobs/restore/; plans are created by orders/<id>/plan/
 
     def get_queryset(self):
+        backfill_entries()
         qs = Job.objects.select_related("sales_order__batch", "created_by")
-        batch = self.request.query_params.get("batch")  # ?batch=<id>, or all batches
+        batch = self.request.query_params.get("batch")  # ?batch=<id>, "none", or all batches
+        if batch == "none":  # plans whose Excel sheet was deleted
+            return qs.filter(sales_order__entries__isnull=True).order_by("-updated_at")
         if batch and batch.isdigit():
-            qs = qs.filter(sales_order__batch_id=int(batch))
+            batch_id = int(batch)
+            # every job of an order that is in this sheet, in the sheet's own order
+            row_in_sheet = BatchOrder.objects.filter(
+                batch_id=batch_id, order_id=OuterRef("sales_order_id")
+            ).values("position")[:1]
+            return (qs.filter(sales_order__entries__batch_id=batch_id)
+                      .annotate(sheet_position=Subquery(row_in_sheet))
+                      .order_by("sheet_position"))
         return qs.order_by("-sales_order__batch__uploaded_at",
                            "sales_order__batch_id", "sales_order__position")
 
     def perform_update(self, serializer):
-        old = {f: str(getattr(serializer.instance, f)) for f in TRACKED_JOB_FIELDS}
+        old = edit_snapshot(serializer.instance)  # taken BEFORE the save
         with transaction.atomic():
             job = serializer.save()  # Job.save() recalculates everything
-            changes = {f: [old[f], str(getattr(job, f))]
-                       for f in TRACKED_JOB_FIELDS if old[f] != str(getattr(job, f))}
+            new = edit_snapshot(job)
+            changes = {f: [old[f], new[f]] for f in new if old[f] != new[f]}
             if changes:
                 log_job(job, "edited", changes, self.request.user)
 
@@ -334,13 +441,75 @@ class JobViewSet(
             order.status = SalesOrder.PENDING  # so it can be planned again
             order.save(update_fields=["status"])
 
+    @action(detail=False, methods=["post"])
+    def restore(self, request):
+        """
+        POST /api/jobs/restore/  {"ids": [12, 13]}  = the Undo button.
+        Brings deleted job plans back from the audit log. A plan is skipped
+        (with a reason) when it can no longer be restored safely.
+        """
+        ids = request.data.get("ids")
+        if (not isinstance(ids, list) or not ids or len(ids) > 500
+                or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids)):
+            return Response({"detail": "Send a list of job ids to restore."}, status=400)
+
+        User = get_user_model()
+        refs = reference_lookup()
+        restored, skipped = [], []
+
+        with transaction.atomic():
+            for old_id in ids:
+                log = (JobLog.objects.filter(job_id=old_id, action="deleted")
+                       .order_by("-at").first())
+                if log is None:
+                    skipped.append({"id": old_id, "reason": "No deleted plan was found."})
+                    continue
+                d = log.details
+                order = SalesOrder.objects.filter(so_number=d.get("so_number")).first()
+                ref = refs.get(normalize_name(log.reference_name))
+
+                if order is None:
+                    reason = "The order no longer exists."
+                elif Job.objects.filter(sales_order=order).exists():
+                    reason = "The order already has a job plan."
+                elif ref is None:
+                    reason = f"'{log.reference_name}' is no longer in the Main sheet."
+                elif (order.quantity != d.get("quantity")
+                      or normalize_name(order.reference_name) != normalize_name(log.reference_name)):
+                    reason = "The order was changed by a newer upload."
+                else:
+                    reason = None
+
+                if reason:
+                    skipped.append({"id": old_id, "reason": reason})
+                    continue
+
+                owner = None
+                if d.get("saved_by"):
+                    owner = User.objects.filter(username=d["saved_by"]).first()
+                job = Job.objects.create(
+                    sales_order=order, reference=ref, machine=d["machine"], ups=d["ups"],
+                    colours=d["colours"], sides=d["sides"],
+                    created_by=owner or request.user,
+                )
+                saved_at = parse_datetime(d["saved_at"]) if d.get("saved_at") else None
+                if saved_at:  # keep the original "planned on" time
+                    Job.objects.filter(pk=job.pk).update(created_at=saved_at)
+                order.status = SalesOrder.PLANNED
+                order.save(update_fields=["status"])
+                log_job(job, "restored", {"so_number": order.so_number,
+                                          "restored_from_job_id": old_id}, request.user)
+                restored.append(job.id)
+
+        return Response({"restored": restored, "skipped": skipped})
+
     @action(detail=False, methods=["get"])
     def export(self, request):
         """GET /api/jobs/export/?batch=<id>  -> Excel file (all batches if no id)."""
         jobs = self.get_queryset()  # not paged, not searched: the whole batch
         content = build_jobs_workbook(jobs)
         batch = request.query_params.get("batch")
-        label = "all"
+        label = "deleted-sheets" if batch == "none" else "all"
         if batch and batch.isdigit():
             found = UploadBatch.objects.filter(pk=int(batch)).first()
             label = safe_filename_part(found.filename) if found else f"batch-{batch}"

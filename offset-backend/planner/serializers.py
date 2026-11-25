@@ -100,36 +100,108 @@ def check_overflow(quantity, ups, sides, colours):
 
 # ---------------------------------------------------------------- Job plans
 class JobSerializer(serializers.ModelSerializer):
+    """
+    One row of the Job plans table. Every column can be edited (PATCH) except the
+    calculated ones (balance, impressions, total impressions, total clicks) and
+    the bookkeeping ones (who planned it, dates).
+
+    Order details (SO number, customer, FG ...) belong to the order, so a change
+    to them is seen in every sheet that contains that order.
+    """
     created_by = serializers.StringRelatedField(read_only=True)
     order_id = serializers.IntegerField(source="sales_order_id", read_only=True)
-    so_number = serializers.CharField(source="sales_order.so_number", read_only=True)
-    order_type = serializers.CharField(source="sales_order.order_type", read_only=True)
-    customer = serializers.CharField(source="sales_order.customer", read_only=True)
-    order_place_date = serializers.DateField(source="sales_order.order_place_date", read_only=True)
-    noc = serializers.IntegerField(source="sales_order.noc", read_only=True)
-    value = serializers.DecimalField(source="sales_order.value", max_digits=14, decimal_places=2,
-                                     coerce_to_string=False, read_only=True)
-    batch_id = serializers.IntegerField(source="sales_order.batch_id", read_only=True)
-    batch_name = serializers.CharField(source="sales_order.batch.filename", read_only=True)
-    # The only two things a planner may change on a saved plan:
+    # empty when the sheet of this plan was deleted
+    batch_id = serializers.IntegerField(
+        source="sales_order.batch_id", read_only=True, allow_null=True)
+    batch_name = serializers.CharField(
+        source="sales_order.batch.filename", read_only=True, allow_null=True)
+
+    # ---- the order's own details (editable) ----
+    so_number = serializers.CharField(source="sales_order.so_number", max_length=50)
+    order_type = serializers.CharField(source="sales_order.order_type", max_length=100)
+    customer = serializers.CharField(source="sales_order.customer", max_length=255)
+    order_place_date = serializers.DateField(
+        source="sales_order.order_place_date", required=False, allow_null=True)
+    noc = serializers.IntegerField(source="sales_order.noc", min_value=0, max_value=MAX_DB_INT)
+    value = serializers.DecimalField(
+        source="sales_order.value", max_digits=14, decimal_places=2,
+        min_value=0, coerce_to_string=False)
+    current_stage = serializers.CharField(
+        source="sales_order.current_stage", max_length=100, required=False, allow_blank=True)
+    docket_stage = serializers.CharField(
+        source="sales_order.docket_stage", max_length=100, required=False, allow_blank=True)
+    hold_status = serializers.CharField(
+        source="sales_order.hold_status", max_length=100, required=False, allow_blank=True)
+    fg = serializers.IntegerField(
+        source="sales_order.fg", min_value=0, max_value=MAX_DB_INT,
+        required=False, allow_null=True)
+    balance = serializers.SerializerMethodField()  # quantity - fg (null when FG is unknown)
+
+    # ---- the plan's own details (editable) ----
+    reference_name = serializers.CharField(max_length=255)
+    quantity = serializers.IntegerField(min_value=1, max_value=MAX_DB_INT)
     machine = serializers.ChoiceField(choices=MACHINES)
     ups = serializers.IntegerField(min_value=1, max_value=100000)
+    colours = serializers.IntegerField(min_value=1, max_value=1000)
+    sides = serializers.IntegerField(min_value=1, max_value=1000)
 
     class Meta:
         model = Job
         fields = ["id", "order_id", "so_number", "order_type", "customer",
                   "order_place_date", "noc", "value", "batch_id", "batch_name",
+                  "current_stage", "docket_stage", "hold_status", "fg", "balance",
                   "reference_name", "quantity", "machine", "ups", "colours", "sides",
                   "impressions", "total_impressions", "total_clicks",
                   "created_by", "created_at", "updated_at"]
-        read_only_fields = ["reference_name", "quantity", "colours", "sides",
-                            "impressions", "total_impressions", "total_clicks",
+        read_only_fields = ["impressions", "total_impressions", "total_clicks",
                             "created_at", "updated_at"]
+
+    def get_balance(self, obj):
+        fg = obj.sales_order.fg
+        return None if fg is None else obj.quantity - fg
+
+    def validate_so_number(self, value):
+        value = " ".join(value.split())
+        same = SalesOrder.objects.filter(so_number=value)
+        if self.instance:
+            same = same.exclude(pk=self.instance.sales_order_id)
+        if same.exists():
+            raise serializers.ValidationError("Another order already has this SO number.")
+        return value
+
+    def validate_reference_name(self, value):
+        value = " ".join(value.split())
+        if not Reference.objects.filter(name__iexact=value).exists():
+            raise serializers.ValidationError(
+                f"'{value}' is not in the Main sheet. Add it there first.")
+        return value
 
     def validate(self, attrs):
         job = self.instance
-        check_overflow(job.quantity, attrs.get("ups", job.ups), job.sides, job.colours)
+        check_overflow(
+            attrs.get("quantity", job.quantity), attrs.get("ups", job.ups),
+            attrs.get("sides", job.sides), attrs.get("colours", job.colours),
+        )
         return attrs
+
+    def update(self, job, validated_data):
+        order = job.sales_order
+        for field, value in validated_data.pop("sales_order", {}).items():
+            setattr(order, field, value)
+
+        if "quantity" in validated_data:  # the order and its plan share the quantity
+            order.quantity = validated_data["quantity"]
+        if "reference_name" in validated_data:
+            ref = Reference.objects.filter(name__iexact=validated_data["reference_name"]).first()
+            job.reference = ref
+            validated_data["reference_name"] = ref.name
+            order.reference_name = ref.name
+
+        for field, value in validated_data.items():
+            setattr(job, field, value)
+        order.save()
+        job.save()  # recalculates impressions, total impressions and total clicks
+        return job
 
 
 # ------------------------------------------------------------------- Account

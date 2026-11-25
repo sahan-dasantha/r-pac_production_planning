@@ -7,8 +7,9 @@ const when = (iso) => new Date(iso).toLocaleDateString();
  *
  * Props:
  *   batches, batchId, onBatchChange - the batch picker (one batch per upload)
- *   onUpload(file)                  - called when a file has been chosen
- *   uploading                       - true while the upload runs
+ *   onUpload(files)                 - called with an ARRAY of the chosen files
+ *   uploading                       - true while the uploads run
+ *   onDelete, deleting              - the "Delete the Excel sheet" button
  *   error                           - a one-line error (wrong file type, server down...)
  *   problems                        - { total, detail, errors: [{row, column, message}] }
  *                                     when the sheet was read but rejected
@@ -20,16 +21,18 @@ export default function UploadPanel({
   onBatchChange,
   onUpload,
   uploading,
+  onDelete,
+  deleting,
   error,
   problems,
   note,
 }) {
   const fileInput = useRef(null); // the hidden file picker
 
-  function handleFile(e) {
-    const file = e.target.files[0];
-    e.target.value = ""; // allows choosing the same file again later
-    if (file) onUpload(file);
+  function handleFiles(e) {
+    const files = Array.from(e.target.files); // every file that was chosen
+    e.target.value = ""; // allows choosing the same files again later
+    if (files.length > 0) onUpload(files);
   }
 
   return (
@@ -40,16 +43,32 @@ export default function UploadPanel({
           ref={fileInput}
           type="file"
           accept=".xlsx"
+          multiple
           hidden
-          onChange={handleFile}
+          onChange={handleFiles}
         />
-        <button
-          type="button"
-          onClick={() => fileInput.current.click()}
-          disabled={uploading}
-        >
-          {uploading ? "Uploading..." : "Choose Excel file"}
-        </button>
+
+        {/* "Choose Excel file" with the delete button right under it */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => fileInput.current.click()}
+            disabled={uploading}
+            title="You can select several Excel files at once"
+          >
+            {uploading ? "Uploading..." : "Choose Excel file"}
+          </button>
+          {onDelete && batchId !== null && (
+            <button
+              type="button"
+              className="secondary danger"
+              onClick={onDelete}
+              disabled={deleting || uploading}
+            >
+              {deleting ? "Deleting..." : "Delete the Excel sheet"}
+            </button>
+          )}
+        </div>
 
         <div className="upload-batch">
           <label htmlFor="batch-select">Planning batch</label>

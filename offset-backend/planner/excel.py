@@ -6,8 +6,10 @@ from io import BytesIO
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.comments import Comment
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
+
+from django.utils import timezone
 
 MAX_HEADER_SEARCH_ROWS = 10   # your sheets have a title row above the header
 MAX_ERRORS_SHOWN = 50         # show the first 50 problems, count the rest
@@ -43,7 +45,8 @@ def normalize_name(value):
 # ----------------------------------------------------------------------
 # READ
 # ----------------------------------------------------------------------
-LABELS = {
+# These columns MUST be in the sheet.
+REQUIRED_LABELS = {
     "so_number": "SO number",
     "reference": "Reference",
     "order_type": "Order type",
@@ -53,6 +56,15 @@ LABELS = {
     "quantity": "Quantity",
     "value": "Value",
 }
+# These columns are OPTIONAL. If the sheet has them they are stored and shown
+# on the Job plans tab; if not, the upload still works.
+OPTIONAL_LABELS = {
+    "current_stage": "Current stage",
+    "docket_stage": "Docket stage",
+    "fg": "FG",
+    "hold_status": "Hold/Unhold",
+}
+LABELS = {**REQUIRED_LABELS, **OPTIONAL_LABELS}
 
 # Accepted header spellings (compared in lower case, punctuation ignored).
 # "New S/O Nu", "REFFERANCE" and "CUSTOMER " from your own sheets all work.
@@ -68,6 +80,12 @@ HEADER_ALIASES = {
                          "order date", "place date"},
     "quantity": {"quantity", "qty"},
     "value": {"value", "order value"},
+    # optional
+    "current_stage": {"current stage", "stage", "current status"},
+    "docket_stage": {"docket stage", "docket status"},
+    "fg": {"fg", "finished goods", "finished good", "fg qty", "fg quantity"},
+    # "Hold/Unhold" becomes "holdunhold" once the punctuation is removed
+    "hold_status": {"hold unhold", "holdunhold", "hold status", "hold"},
 }
 ALIAS_TO_FIELD = {a: f for f, names in HEADER_ALIASES.items() for a in names}
 
@@ -221,11 +239,33 @@ def validate_rows(columns, rows):
             if value is None or value < 0:
                 bad("value", "must be a number (0 or more)")
 
+        # ---- optional columns: only read them when the sheet has them ----
+        optional = {}
+        for field in ("current_stage", "docket_stage", "hold_status"):
+            if field in columns:
+                raw = cell(row, field)
+                text = "" if is_blank(raw) else to_text(raw)
+                if len(text) > 100:
+                    bad(field, "is too long (maximum 100 characters)")
+                else:
+                    optional[field] = text
+        if "fg" in columns:
+            raw = cell(row, "fg")
+            if is_blank(raw):
+                optional["fg"] = None  # unknown
+            else:
+                fg = to_int(raw)
+                if fg is None or fg < 0 or fg > MAX_INT:
+                    bad("fg", "must be a whole number (0 or more)")
+                else:
+                    optional["fg"] = fg
+
         if len(errors) == before:
             orders.append({
                 "row": row_number, "so_number": so, "reference_name": reference,
                 "order_type": order_type, "customer": customer, "noc": noc,
                 "order_place_date": placed, "quantity": quantity, "value": value,
+                **optional,
             })
 
     if errors:
@@ -259,7 +299,7 @@ def parse_sales_orders(file):
                 rows.append((row_number, row))
             if columns is None:
                 continue
-            missing = [LABELS[f] for f in LABELS if f not in columns]
+            missing = [REQUIRED_LABELS[f] for f in REQUIRED_LABELS if f not in columns]
             if missing:
                 missing_report = missing
                 continue
@@ -269,7 +309,7 @@ def parse_sales_orders(file):
             raise ExcelReadError("These columns are missing: " + ", ".join(missing_report) + ".")
         raise ExcelReadError(
             "Could not find the column headings in the first "
-            f"{MAX_HEADER_SEARCH_ROWS} rows. Expected: " + ", ".join(LABELS.values()) + "."
+            f"{MAX_HEADER_SEARCH_ROWS} rows. Expected: " + ", ".join(REQUIRED_LABELS.values()) + "."
         )
     finally:
         wb.close()
@@ -282,53 +322,68 @@ FONT = "Arial"
 HEADER_FILL = PatternFill("solid", start_color="D4A72C")  # gold, as in the app
 HEADER_FONT = Font(name=FONT, bold=True, color="2B2112")  # umber
 
+def _updated_date(job):
+    """The day the plan was last saved (in the server's local time zone)."""
+    moment = job.updated_at
+    if timezone.is_aware(moment):
+        moment = timezone.localtime(moment)
+    return moment.date()
+
+
 # (key, title, column width, number format)
+# The same columns, in the same order, as the table on the Job plans tab.
 COLUMNS = [
-    ("no", "No.", 6, None),
-    ("so_number", "SO number", 14, None),
-    ("reference", "Reference", 46, None),
-    ("order_type", "Order type", 18, None),
-    ("customer", "Customer", 30, None),
-    ("order_place_date", "Order place date", 16, "DD/MM/YYYY"),
-    ("noc", "Number of changes", 12, "#,##0"),
-    ("value", "Value", 14, "#,##0.00"),
+    ("updated", "Last updated date", 16, "DD/MM/YYYY"),
+    ("current_stage", "Current Stage", 18, None),
+    ("docket_stage", "Docket Stage", 18, None),
+    ("so_number", "SO Number", 14, None),
+    ("order_type", "Order Type", 20, None),
     ("quantity", "Quantity", 12, "#,##0"),
+    ("fg", "FG", 12, "#,##0"),
+    ("balance", "Balance", 12, "#,##0"),
+    ("noc", "NOC", 10, "#,##0"),
+    ("reference", "References", 46, None),
+    ("customer", "Customer", 30, None),
+    ("order_place_date", "Order Place", 14, "DD/MM/YYYY"),
+    ("value", "Value", 14, "#,##0.00"),
+    ("impressions", "Impression", 14, "#,##0"),
+    ("total_impressions", "Total Impression", 18, "#,##0"),
+    ("ups", "UP Plan", 10, "#,##0"),
+    ("colours", "No of Colours", 14, "#,##0"),
+    ("sides", "No of Sides", 12, "#,##0"),
+    ("total_clicks", "Total Clicks", 14, "#,##0"),
     ("machine", "Machine", 14, None),
-    ("ups", "UPs", 8, "#,##0"),
-    ("colours", "Colours", 10, "#,##0"),
-    ("sides", "Sides", 8, "#,##0"),
-    ("impressions", "Impressions", 14, "#,##0"),
-    ("total_impressions", "Total impressions", 18, "#,##0"),
-    ("total_clicks", "Total clicks", 14, "#,##0"),
-    ("batch", "Uploaded file", 26, None),
-    ("planned_by", "Planned by", 14, None),
+    ("hold_status", "Hold/Unhold", 14, None),
 ]
 
 GETTERS = {
+    "updated": _updated_date,
+    "current_stage": lambda j: j.sales_order.current_stage,
+    "docket_stage": lambda j: j.sales_order.docket_stage,
     "so_number": lambda j: j.sales_order.so_number,
-    "reference": lambda j: j.reference_name,
     "order_type": lambda j: j.sales_order.order_type,
+    "quantity": lambda j: j.quantity,
+    "fg": lambda j: j.sales_order.fg,  # empty cell when unknown
+    "noc": lambda j: j.sales_order.noc,
+    "reference": lambda j: j.reference_name,
     "customer": lambda j: j.sales_order.customer,
     "order_place_date": lambda j: j.sales_order.order_place_date,
-    "noc": lambda j: j.sales_order.noc,
     "value": lambda j: float(j.sales_order.value),
-    "quantity": lambda j: j.quantity,
-    "machine": lambda j: j.machine,
     "ups": lambda j: j.ups,
     "colours": lambda j: j.colours,
     "sides": lambda j: j.sides,
-    "batch": lambda j: j.sales_order.batch.filename,
-    "planned_by": lambda j: j.created_by.username if j.created_by else "",
+    "machine": lambda j: j.machine,
+    "hold_status": lambda j: j.sales_order.hold_status,
 }
 
 # The relations between the columns, written as real Excel formulas.
 # {quantity} etc. become column letters, {r} the row number.
 FORMULAS = {
+    "balance": '=IF({fg}{r}="","",{quantity}{r}-{fg}{r})',
     "impressions": "=ROUNDUP({quantity}{r}/{ups}{r},0)",
     "total_impressions": "={impressions}{r}*{sides}{r}",
     "total_clicks": "={total_impressions}{r}*{colours}{r}",
 }
-TOTALLED = ("quantity", "impressions", "total_impressions", "total_clicks")
 
 
 def build_jobs_workbook(jobs):
@@ -351,9 +406,7 @@ def build_jobs_workbook(jobs):
     for number, job in enumerate(jobs, start=1):
         last = number + 1
         for col, (key, _title, _width, fmt) in enumerate(COLUMNS, start=1):
-            if key == "no":
-                value = number
-            elif key in FORMULAS:
+            if key in FORMULAS:
                 value = FORMULAS[key].format(r=last, **letters)
             else:
                 value = GETTERS[key](job)
@@ -361,18 +414,6 @@ def build_jobs_workbook(jobs):
             cell.font = Font(name=FONT)
             if fmt:
                 cell.number_format = fmt
-
-    if last > 1:
-        total_row = last + 1
-        top = Border(top=Side(style="thin"))
-        label = ws[f"{letters['so_number']}{total_row}"]
-        label.value, label.font, label.border = "Total", Font(name=FONT, bold=True), top
-        for key in TOTALLED:  # SUBTOTAL ignores rows hidden by the filter
-            col = letters[key]
-            cell = ws[f"{col}{total_row}"]
-            cell.value = f"=SUBTOTAL(109,{col}2:{col}{last})"
-            cell.number_format = "#,##0"
-            cell.font, cell.border = Font(name=FONT, bold=True), top
 
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = f"A1:{get_column_letter(len(COLUMNS))}{max(last, 2)}"
