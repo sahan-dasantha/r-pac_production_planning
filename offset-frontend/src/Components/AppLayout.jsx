@@ -68,6 +68,7 @@ export default function AppLayout() {
       </header>
 
       <nav className="tabs">
+        <NavLink to="/dog">cat</NavLink>
         <NavLink to="/" end>
           Home
         </NavLink>

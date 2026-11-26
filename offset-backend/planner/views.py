@@ -29,7 +29,7 @@ from .serializers import (
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # reject files over 10 MB
 TRACKED = ["ups", "colours", "sides", "default_machine"]
-TRACKED_JOB_FIELDS = ["machine", "ups", "total_clicks"]
+TRACKED_JOB_FIELDS = ["machine", "ups", "colours", "sides", "total_clicks"]
 # Optional sheet columns that are stored on the order when the sheet has them.
 OPTIONAL_ORDER_FIELDS = ["current_stage", "docket_stage", "fg", "hold_status"]
 
@@ -76,7 +76,7 @@ def edit_snapshot(job):
         "so_number": o.so_number, "order_type": o.order_type, "customer": o.customer,
         "order_place_date": o.order_place_date, "noc": o.noc, "value": o.value,
         "current_stage": o.current_stage, "docket_stage": o.docket_stage,
-         "hold_status": o.hold_status, "fg": o.fg,
+        "hold_status": o.hold_status, "fg": o.fg,
         "reference_name": job.reference_name, "quantity": job.quantity,
         "machine": job.machine, "ups": job.ups, "colours": job.colours,
         "sides": job.sides, "total_clicks": job.total_clicks,
@@ -329,7 +329,7 @@ class SalesOrderViewSet(mixins.RetrieveModelMixin, viewsets.GenericViewSet):
 
     @action(detail=True, methods=["post"])
     def plan(self, request, pk=None):
-        """POST /api/orders/<id>/plan/  {machine, ups}  = the Next button."""
+        """POST /api/orders/<id>/plan/  {machine, ups, colours, sides}  = the Next button."""
         order = self.get_object()
         form = PlanSerializer(data=request.data)
         form.is_valid(raise_exception=True)
@@ -342,18 +342,25 @@ class SalesOrderViewSet(mixins.RetrieveModelMixin, viewsets.GenericViewSet):
                  "code": "missing_reference"},
                 status=status.HTTP_409_CONFLICT,
             )
-        check_overflow(order.quantity, ups, ref.sides, ref.colours)
+        # The planner may have edited the colours and sides in the Job breakdown
+        # panel: use their values, and the Main sheet values only when none were sent.
+        colours = form.validated_data.get("colours", ref.colours)
+        sides = form.validated_data.get("sides", ref.sides)
+        check_overflow(order.quantity, ups, sides, colours)
 
         with transaction.atomic():
             job = Job.objects.filter(sales_order=order).select_related("sales_order").first()
             if job is None:
                 Job.objects.create(sales_order=order, reference=ref, machine=machine,
-                                   ups=ups, created_by=request.user)
+                                   ups=ups, colours=colours, sides=sides,
+                                   created_by=request.user)
             else:  # re-planning (the planner used Previous or clicked the SO)
                 old = {f: str(getattr(job, f)) for f in TRACKED_JOB_FIELDS}
                 job.reference, job.machine, job.ups = ref, machine, ups
-                job.take_snapshot()  # pick up any Main sheet edits since
-                job.save()
+                job.colours, job.sides = colours, sides
+                job.reference_name = ref.name  # pick up any Main sheet name change
+                job.quantity = order.quantity
+                job.save()  # recalculates impressions, total impressions, total clicks
                 changes = {f: [old[f], str(getattr(job, f))]
                            for f in TRACKED_JOB_FIELDS if old[f] != str(getattr(job, f))}
                 if changes:

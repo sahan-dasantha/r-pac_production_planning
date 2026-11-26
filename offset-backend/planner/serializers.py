@@ -80,6 +80,7 @@ class SalesOrderSerializer(serializers.ModelSerializer):
         if job is None:
             return None
         return {"id": job.id, "machine": job.machine, "ups": job.ups,
+                "colours": job.colours, "sides": job.sides,
                 "impressions": job.impressions,
                 "total_impressions": job.total_impressions,
                 "total_clicks": job.total_clicks}
@@ -89,6 +90,10 @@ class PlanSerializer(serializers.Serializer):
     """What the planner sends when clicking Next."""
     machine = serializers.ChoiceField(choices=MACHINES)
     ups = serializers.IntegerField(min_value=1, max_value=100000)
+    # Optional: the planner may edit these in the Job breakdown panel.
+    # When they are not sent, the Main sheet values are used.
+    colours = serializers.IntegerField(min_value=1, max_value=1000, required=False)
+    sides = serializers.IntegerField(min_value=1, max_value=1000, required=False)
 
 
 def check_overflow(quantity, ups, sides, colours):
