@@ -582,4 +582,43 @@
   .tile-value {
     font-size: 20px;
   }
+  /* ---------- Home tab: the sheet that Plan orders will open ---------- */
+  .sheet-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 16px 20px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--gold);
+    border-radius: 12px;
+  }
+  .sheet-name {
+    font-size: 18px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  .sheet-picker {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .sheet-picker label {
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .sheet-picker select {
+    flex: 1;
+    min-width: 240px;
+    max-width: 560px;
+  }
+  .sheet-picker a {
+    color: var(--gold-deep);
+    font-weight: 600;
+  }
 }

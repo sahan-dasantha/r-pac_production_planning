@@ -71,8 +71,9 @@ export default function AppLayout() {
         <NavLink to="/" end>
           Home
         </NavLink>
+        <NavLink to="/plan">Plan orders</NavLink>
         <NavLink to="/job-plans">Job plans</NavLink>
-        <NavLink to="/main-sheet">Main sheet</NavLink>
+        <NavLink to="/references">References</NavLink>
       </nav>
 
       <Outlet />

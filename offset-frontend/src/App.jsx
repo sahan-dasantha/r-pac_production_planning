@@ -1,10 +1,11 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
-import Home from "./pages/Home";
+import PlanOrders from "./pages/PlanOrders";
 import JobPlans from "./pages/JobPlans";
 import MainSheet from "./pages/MainSheet";
 import AppLayout from "./Components/AppLayout";
 import ProtectedRoute from "./Components/ProtectedRoute"; // capital C, matches the folder name
+import Home from "./pages/Home";
 
 export default function App() {
   return (
@@ -18,8 +19,9 @@ export default function App() {
         }
       >
         <Route index element={<Home />} />
+        <Route path="plan" element={<PlanOrders />} />
         <Route path="job-plans" element={<JobPlans />} />
-        <Route path="main-sheet" element={<MainSheet />} />
+        <Route path="references" element={<MainSheet />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

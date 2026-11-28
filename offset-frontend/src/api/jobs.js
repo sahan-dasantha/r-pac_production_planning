@@ -28,10 +28,12 @@ export const listBatchOrders = (batchId) =>
 // ----------------------------------------------------------------- Orders
 // Each of these returns the updated order, in the same shape as the list.
 
-// POST /api/orders/<id>/plan/ -> the Next button: save machine + UPs.
+// POST /api/orders/<id>/plan/ -> the Next button: save machine, UPs, colours and sides.
 // Calling it again for an already planned order re-plans it.
-export const planOrder = (id, { machine, ups }) =>
-  api.post(`/orders/${id}/plan/`, { machine, ups }).then((r) => r.data);
+export const planOrder = (id, { machine, ups, colours, sides }) =>
+  api
+    .post(`/orders/${id}/plan/`, { machine, ups, colours, sides })
+    .then((r) => r.data);
 
 // POST /api/orders/<id>/skip/ -> cannot be planned now
 export const skipOrder = (id) =>
